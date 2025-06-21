@@ -118,19 +118,23 @@ agent:
   model: "claude-3-5-sonnet-20241022"
   tools: ["bash", "read", "write", "edit", ...]
   
-supervisor:
-  model: "heuristic"    # or "claude-3-opus-latest" for LLM supervision
-  verbose: true
-  zen_integration:
-    enabled: true
-    stuck_detection: true
-    auto_debug_threshold: 3     # Errors before calling zen
-    retrospective_turn_threshold: 0.8  # 80% of max turns
-    validate_on_complete:
-      - "*security*"
-      - "*database*"
-      - "*critical*"
+task_detection:
+  completion_phrase: "ALL TASKS COMPLETE"
+  help_needed_phrase: "HELP NEEDED"
+  stuck_status_phrase: "Status: STUCK"
+  
+zen_integration:
+  output_lines_limit: 200     # Lines to include in zen context
+  scratchpad_check_lines: 10  # Lines to check for help requests
+  auto_debug_error_threshold: 3
+  
+processing:
+  thread_join_timeout: 5      # Thread cleanup timeout
+  status_check_interval: 30   # Progress check interval
+  max_output_truncate_length: 3000
 ```
+
+See `config.yaml` for all configuration options.
 
 ## Documentation
 
@@ -148,6 +152,10 @@ supervisor:
 ## License
 
 MIT License - see LICENSE file for details
+
+## Development
+
+See [TODO.md](TODO.md) for planned improvements and known issues.
 
 ## Contributing
 

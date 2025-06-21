@@ -71,5 +71,46 @@ cadence_output/
 *.log
 session_summary_*.json
 
+# Session and execution files
+.cadence/
+logs/
+**/session_*.md
+**/session_*.json
+**/session_*.log
+supervisor_*.log
+execution_*.log
+
+# Scratchpad files
+scratchpad/
+.scratchpad/
+**/scratchpad_*.md
+
+# Test outputs and artifacts
+test_output/
+test_logs/
+*.test.log
+test_session_*/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*~
+.*.swp
+.*.swo
+
 # Task Master
 .taskmaster/
+
+# Debug and analysis outputs
+debug_*.txt
+analysis_*.md
+recommendations.md
+state_analysis_*.txt
+
+# Personal notes and local configs
+CLAUDE.local.md
+.claude.local/
+local_notes.md
+TODO.local.md

@@ -15,6 +15,11 @@ from datetime import datetime
 
 from .config import ZenIntegrationConfig, SCRATCHPAD_DIR
 
+# Detection thresholds
+CUTOFF_INDICATOR_THRESHOLD = 3    # Number of indicators before assuming cutoff
+AUTO_DEBUG_ERROR_THRESHOLD = 3    # Repeated errors before triggering debug
+LAST_LINES_TO_CHECK = 50         # Number of output lines to check for patterns
+
 
 @dataclass
 class ZenRequest:
@@ -97,9 +102,10 @@ class ZenIntegration:
                     
         return None
         
-    def _detect_stuck_agent(self, result, context, session_id: str) -> Optional[str]:
+    def _detect_stuck_agent(self, result, context, session_id: str) -> bool:
         """Alias for _detect_stuck_status for backward compatibility"""
-        return self._detect_stuck_status(result, session_id)
+        # Return boolean for backward compatibility
+        return self._detect_stuck_status(result, session_id) is not None
         
     def _detect_error_pattern(self, result, session_id: str) -> Optional[str]:
         """Check for repeated error patterns"""
@@ -123,38 +129,53 @@ class ZenIntegration:
         return None
         
     def _categorize_error(self, error: str) -> str:
-        """Categorize error for pattern detection"""
-        # Simple categorization - can be enhanced
-        if "ModuleNotFoundError" in error or "ImportError" in error:
-            return "import_error"
-        elif "FileNotFoundError" in error:
-            return "file_not_found"
-        elif "SyntaxError" in error:
-            return "syntax_error"
-        elif "TypeError" in error or "AttributeError" in error:
-            return "type_error"
-        elif "Permission" in error:
-            return "permission_error"
-        else:
-            # Use first few words as category
-            words = error.split()[:5]
-            return "_".join(words).lower()
+            """Categorize error for pattern detection"""
+            # Define known error patterns
+            error_patterns = {
+                "import_error": ["ModuleNotFoundError", "ImportError", "cannot import name"],
+                "file_not_found": ["FileNotFoundError", "No such file", "does not exist"],
+                "syntax_error": ["SyntaxError", "invalid syntax", "unexpected indent"],
+                "type_error": ["TypeError", "AttributeError", "has no attribute"],
+                "permission_error": ["Permission", "PermissionError", "Access denied"],
+                "connection_error": ["ConnectionError", "Network", "unreachable"],
+                "timeout_error": ["TimeoutError", "timed out", "deadline exceeded"],
+                "value_error": ["ValueError", "invalid value", "must be"],
+                "key_error": ["KeyError", "key not found"],
+                "runtime_error": ["RuntimeError", "runtime error"]
+            }
+            
+            # Check against known patterns
+            for category, patterns in error_patterns.items():
+                if any(pattern in error for pattern in patterns):
+                    return category
+            
+            # For unknown errors, use a generic category rather than creating unbounded ones
+            return "unknown_error"
+
             
     def _detect_cutoff(self, result, context) -> bool:
         """Detect if execution was likely cut off at turn limit"""
-        # Check if task is incomplete
+        # Use new completion flags if available
+        if hasattr(result, 'stopped_unexpectedly'):
+            return result.stopped_unexpectedly
+            
+        # Fallback to pattern detection for backward compatibility
         if hasattr(result, 'task_complete') and result.task_complete:
             return False  # Task completed successfully
             
         # Check for signs of being cut off
         if hasattr(result, 'output_lines') and len(result.output_lines) > 0:
-            last_lines = "\n".join(result.output_lines[-50:])
+            last_lines = "\n".join(result.output_lines[-LAST_LINES_TO_CHECK:])
             
             # Look for signs of incomplete work
+            has_remaining_todos = False
+            if hasattr(context, 'remaining_todos') and hasattr(context.remaining_todos, '__len__'):
+                has_remaining_todos = len(context.remaining_todos) > 0
+                    
             cutoff_indicators = [
                 "ALL TASKS COMPLETE" not in last_lines,
                 "HELP NEEDED" not in last_lines,  # Not a help request
-                hasattr(context, 'remaining_todos') and len(context.remaining_todos) > 0,
+                has_remaining_todos,
                 "in progress" in last_lines.lower(),
                 "working on" in last_lines.lower(),
                 "next, i'll" in last_lines.lower(),
@@ -162,10 +183,11 @@ class ZenIntegration:
             ]
             
             # If multiple indicators suggest cutoff
-            if sum(cutoff_indicators) >= 3:
+            if sum(cutoff_indicators) >= CUTOFF_INDICATOR_THRESHOLD:
                 return True
                 
         return False
+
             
     def _task_requires_validation(self, task_description) -> Optional[str]:
         """Check if task matches validation patterns"""
@@ -313,57 +335,72 @@ class ZenIntegration:
             
         return zen_context
         
-    def _zen_debug(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Call zen debug for stuck/error situations"""
-        models = self.config.models.get("debug", ["o3", "pro"])
-        thinking_mode = self.config.thinking_modes.get("debug", "high")
-        
-        prompt = f"""
-{reason}
-
-Agent Session: {context.get('session_id', 'unknown')}
-Turns Used: {context.get('turns_used', '?')}/{context.get('max_turns', '?')}
-
-=== SCRATCHPAD ===
-{context.get('scratchpad', 'Not available')}
-
-=== RECENT ERRORS ===
-{chr(10).join(context.get('errors', ['No errors captured']))}
-
-=== RECENT OUTPUT (last 200 lines) ===
-{context.get('recent_output', 'Not available')}
-
-Please analyze what's going wrong and provide specific guidance to help the agent get unstuck.
-Focus on actionable next steps.
-"""
-        
-        # Use first model from list for now
-        model = models[0] if models else "pro"
-        
-        if self.verbose:
-            print(f"   Using model: {model} (thinking: {thinking_mode})")
-            
-        # Build zen command
-        cmd = [
-            "claude", "-p", prompt,
-            "--tool", "mcp",
-            "--mcp-tool", f"zen__debug",
-            "--model", model
+    def _format_context_prompt(self, reason: str, context: Dict[str, Any], additional_sections: Dict[str, str] = None) -> str:
+        """Format a standardized context prompt for zen tools"""
+        sections = [
+            f"{reason}",
+            "",
+            f"Agent Session: {context.get('session_id', 'unknown')}",
+            f"Turns Used: {context.get('turns_used', '?')}/{context.get('max_turns', '?')}",
+            "",
+            "=== SCRATCHPAD ===",
+            context.get('scratchpad', 'Not available'),
+            "",
+            "=== RECENT ERRORS ===",
+            chr(10).join(context.get('errors', ['No errors captured'])),
+            "",
+            "=== RECENT OUTPUT (last 200 lines) ===",
+            context.get('recent_output', 'Not available')
         ]
         
-        # For now, return mock response - real implementation would call zen
-        return {
-            "tool": "debug",
-            "success": True,
-            "model": model,
-            "thinking_mode": thinking_mode,
-            "guidance": f"[Zen debug analysis would appear here for: {reason}]",
-            "recommended_actions": [
-                "Check the specific error context",
-                "Verify dependencies are installed",
-                "Review the scratchpad for patterns"
+        # Add any additional sections provided
+        if additional_sections:
+            for title, content in additional_sections.items():
+                sections.extend(["", f"=== {title.upper()} ===", content])
+        
+        return "\n".join(sections)
+        
+    def _zen_debug(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
+            """Call zen debug for stuck/error situations"""
+            models = self.config.models.get("debug", ["o3", "pro"])
+            thinking_mode = self.config.thinking_modes.get("debug", "high")
+            
+            prompt = self._format_context_prompt(
+                reason, 
+                context,
+                {
+                    "REQUEST": "Please analyze what's going wrong and provide specific guidance to help the agent get unstuck.\nFocus on actionable next steps."
+                }
+            )
+            
+            # Use first model from list for now
+            model = models[0] if models else "pro"
+            
+            if self.verbose:
+                print(f"   Using model: {model} (thinking: {thinking_mode})")
+                
+            # Build zen command
+            cmd = [
+                "claude", "-p", prompt,
+                "--tool", "mcp",
+                "--mcp-tool", f"zen__debug",
+                "--model", model
             ]
-        }
+            
+            # For now, return mock response - real implementation would call zen
+            return {
+                "tool": "debug",
+                "success": True,
+                "model": model,
+                "thinking_mode": thinking_mode,
+                "guidance": f"[Zen debug analysis would appear here for: {reason}]",
+                "recommended_actions": [
+                    "Check the specific error context",
+                    "Verify dependencies are installed",
+                    "Review the scratchpad for patterns"
+                ]
+            }
+
         
     def _zen_review(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Call zen code review"""
@@ -396,6 +433,12 @@ Focus on actionable next steps.
             "guidance": f"[Zen analysis would appear here for: {reason}]",
             "lessons_learned": []
         }
+    def cleanup_session(self, session_id: str):
+        """Remove session data to prevent memory leaks."""
+        if session_id in self.error_counts:
+            if self.verbose:
+                print(f"Cleaning up error counts for session {session_id}")
+            del self.error_counts[session_id]
         
     def generate_continuation_guidance(self, zen_response: Dict[str, Any]) -> str:
         """

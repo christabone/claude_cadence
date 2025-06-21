@@ -8,10 +8,27 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 
-# Constants for system-wide strings
+# Constants for system-wide strings (defaults, can be overridden by config)
 COMPLETION_PHRASE = "ALL TASKS COMPLETE"
+HELP_NEEDED_PHRASE = "HELP NEEDED"
+STUCK_STATUS_PHRASE = "Status: STUCK"
 SCRATCHPAD_DIR = ".cadence/scratchpad"
 SUPERVISOR_LOG_DIR = ".cadence/supervisor"
+
+# Processing constants (defaults, can be overridden by config)
+ZEN_OUTPUT_LINES_LIMIT = 200
+SCRATCHPAD_CHECK_LINES = 10
+CUTOFF_INDICATOR_THRESHOLD = 3
+LAST_LINES_TO_CHECK = 50
+AUTO_DEBUG_ERROR_THRESHOLD = 3
+THREAD_JOIN_TIMEOUT = 5
+STATUS_CHECK_INTERVAL = 30
+MAX_OUTPUT_TRUNCATE_LENGTH = 3000
+SECONDS_PER_TURN_ESTIMATE = 30
+
+# Session constants (defaults, can be overridden by config)
+SESSION_ID_FORMAT = "%Y%m%d_%H%M%S"
+SESSION_FILE_PREFIX = "session_"
 
 
 @dataclass
@@ -92,6 +109,9 @@ class TaskDetectionConfig:
         "completed", "done", "finished", "implemented",
         "fixed", "resolved", "added", "created"
     ])
+    completion_phrase: str = COMPLETION_PHRASE
+    help_needed_phrase: str = HELP_NEEDED_PHRASE
+    stuck_status_phrase: str = STUCK_STATUS_PHRASE
 
 
 
@@ -106,7 +126,9 @@ class CadenceConfig:
     session: Dict[str, Any] = field(default_factory=lambda: {
         "save_summaries": True,
         "summary_dir": ".cadence/sessions",
-        "include_checkpoint_details": True
+        "include_checkpoint_details": True,
+        "id_format": SESSION_ID_FORMAT,
+        "file_prefix": SESSION_FILE_PREFIX
     })
     integrations: Dict[str, Any] = field(default_factory=lambda: {
         "taskmaster": {
@@ -122,6 +144,19 @@ class CadenceConfig:
     prompts: Dict[str, Any] = field(default_factory=lambda: {
         "custom_prompts_file": "",
         "include_timestamp": True
+    })
+    zen_integration: Dict[str, Any] = field(default_factory=lambda: {
+        "output_lines_limit": ZEN_OUTPUT_LINES_LIMIT,
+        "scratchpad_check_lines": SCRATCHPAD_CHECK_LINES,
+        "cutoff_indicator_threshold": CUTOFF_INDICATOR_THRESHOLD,
+        "last_lines_to_check": LAST_LINES_TO_CHECK,
+        "auto_debug_error_threshold": AUTO_DEBUG_ERROR_THRESHOLD
+    })
+    processing: Dict[str, Any] = field(default_factory=lambda: {
+        "thread_join_timeout": THREAD_JOIN_TIMEOUT,
+        "status_check_interval": STATUS_CHECK_INTERVAL,
+        "max_output_truncate_length": MAX_OUTPUT_TRUNCATE_LENGTH,
+        "seconds_per_turn_estimate": SECONDS_PER_TURN_ESTIMATE
     })
     development: Dict[str, Any] = field(default_factory=lambda: {
         "debug": False,
@@ -203,7 +238,7 @@ class ConfigLoader:
                 config.task_detection = TaskDetectionConfig(**data['task_detection'])
                 
             # Direct dictionary configs
-            for key in ['session', 'integrations', 'prompts', 'development']:
+            for key in ['session', 'integrations', 'prompts', 'zen_integration', 'processing', 'development']:
                 if key in data:
                     setattr(config, key, data[key])
                     

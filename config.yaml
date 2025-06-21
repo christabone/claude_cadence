@@ -68,6 +68,10 @@ task_detection:
     - "resolved"
     - "added"
     - "created"
+  # Special phrases for agent status
+  completion_phrase: "ALL TASKS COMPLETE"
+  help_needed_phrase: "HELP NEEDED"
+  stuck_status_phrase: "Status: STUCK"
 
 
 # Session management
@@ -78,6 +82,10 @@ session:
   summary_dir: ".cadence/sessions"
   # Include checkpoint details in summary
   include_checkpoint_details: true
+  # Session ID format (strftime format)
+  id_format: "%Y%m%d_%H%M%S"
+  # Session file prefix
+  file_prefix: "session_"
 
 # Integration settings
 integrations:
@@ -107,6 +115,29 @@ prompts:
   custom_prompts_file: ""
   # Whether to include timestamp in prompts
   include_timestamp: true
+
+# Zen integration settings
+zen_integration:
+  # Number of output lines to include in zen context
+  output_lines_limit: 200
+  # Lines to check for help requests in scratchpad
+  scratchpad_check_lines: 10
+  # Cutoff detection settings
+  cutoff_indicator_threshold: 3
+  last_lines_to_check: 50
+  # Error detection settings
+  auto_debug_error_threshold: 3
+
+# Processing settings
+processing:
+  # Thread join timeout (seconds)
+  thread_join_timeout: 5
+  # Status check interval (seconds)
+  status_check_interval: 30
+  # Maximum output truncate length for supervisor analysis
+  max_output_truncate_length: 3000
+  # Seconds per turn estimate (rough approximation)
+  seconds_per_turn_estimate: 30
 
 # Development settings
 development:

@@ -12,6 +12,10 @@ from pathlib import Path
 import yaml
 import re
 
+# Output processing constants
+MAX_OUTPUT_TRUNCATE_LENGTH = 3000  # Max chars before truncating supervisor analysis
+SECONDS_PER_TURN_ESTIMATE = 30    # Rough estimate for duration calculations
+
 
 @dataclass
 class ExecutionContext:
@@ -175,33 +179,19 @@ class PromptGenerator:
         sections = self.loader.config['agent_prompts']['initial']['sections']
         return self.loader.build_prompt_from_sections(sections, context)
     
-    def generate_continuation_prompt(
-        self,
-        context: ExecutionContext,
-        analysis_guidance: str,
-        supervisor_analysis: Dict[str, Any]
-    ) -> str:
-        """Generate continuation prompt for resumed execution"""
-        
-        # Determine continuation type
+    def _determine_continuation_type(self, supervisor_analysis: Dict[str, Any]) -> str:
+        """Determine the type of continuation based on supervisor analysis"""
         if supervisor_analysis.get('all_complete', False):
-            continuation_type = self.loader.config['todo_templates']['continuation_types']['complete_new_tasks']
+            return self.loader.config['todo_templates']['continuation_types']['complete_new_tasks']
         elif supervisor_analysis.get('has_issues', False):
-            continuation_type = self.loader.config['todo_templates']['continuation_types']['fixing_issues']
+            return self.loader.config['todo_templates']['continuation_types']['fixing_issues']
         else:
-            continuation_type = self.loader.config['todo_templates']['continuation_types']['incomplete']
-        
-        prompt_context = {
-            'max_turns': context.max_turns,
-            'continuation_type': continuation_type,
-            'session_id': supervisor_analysis.get('session_id', 'unknown'),
-            'previous_session_id': supervisor_analysis.get('previous_session_id', 'unknown'),
-            'next_steps_guidance': analysis_guidance
-        }
-        
-        # Generate supervisor analysis section
+            return self.loader.config['todo_templates']['continuation_types']['incomplete']
+
+    def _generate_supervisor_analysis_section(self, supervisor_analysis: Dict[str, Any], analysis_guidance: str) -> str:
+        """Generate the supervisor analysis section of the prompt"""
         if supervisor_analysis.get('all_complete', False):
-            prompt_context['supervisor_analysis'] = self.loader.format_template(
+            return self.loader.format_template(
                 self.loader.config['todo_templates']['supervisor_complete_analysis'],
                 {
                     'previous_work_summary': supervisor_analysis.get('work_summary', 'See previous scratchpad'),
@@ -209,7 +199,7 @@ class PromptGenerator:
                 }
             )
         else:
-            prompt_context['supervisor_analysis'] = self.loader.format_template(
+            return self.loader.format_template(
                 self.loader.config['todo_templates']['supervisor_incomplete_analysis'],
                 {
                     'previous_work_summary': supervisor_analysis.get('work_summary', 'See previous scratchpad'),
@@ -217,57 +207,82 @@ class PromptGenerator:
                     'specific_guidance': analysis_guidance
                 }
             )
+
+    def _generate_task_status_section(self, context: ExecutionContext) -> str:
+        """Generate the task status section"""
+        if not (context.completed_todos or context.remaining_todos):
+            return ""
             
-        # Generate task status section
-        if context.completed_todos or context.remaining_todos:
-            completed_summary = f"{len(context.completed_todos)} TODOs completed" if context.completed_todos else "No TODOs completed yet"
-            remaining_summary = f"{len(context.remaining_todos)} TODOs remaining" if context.remaining_todos else "All TODOs complete"
-            
-            prompt_context['task_status_section'] = f"""=== TASK STATUS ===
+        completed_summary = f"{len(context.completed_todos)} TODOs completed" if context.completed_todos else "No TODOs completed yet"
+        remaining_summary = f"{len(context.remaining_todos)} TODOs remaining" if context.remaining_todos else "All TODOs complete"
+        
+        return f"""=== TASK STATUS ===
 {completed_summary}
 {remaining_summary}
 """
-        else:
-            prompt_context['task_status_section'] = ""
+
+    def _generate_remaining_todos_section(self, context: ExecutionContext, supervisor_analysis: Dict[str, Any]) -> str:
+        """Generate the remaining TODOs section"""
+        if not context.remaining_todos:
+            return "=== NO REMAINING TODOS ===\nAll previous TODOs have been completed."
             
-        # Generate remaining TODOs section
-        if context.remaining_todos:
-            remaining_items = []
-            for i, todo in enumerate(context.remaining_todos[:10], 1):
-                item = self.loader.format_template(
-                    self.loader.config['todo_templates']['todo_item'],
-                    {
-                        'number': i,
-                        'todo_text': todo
-                    }
-                )
-                remaining_items.append(item)
-            
-            todo_list_str = "\n".join(remaining_items)
-            prompt_context['remaining_todos'] = self.loader.format_template(
-                self.loader.config['todo_templates']['todo_list'],
+        remaining_items = []
+        for i, todo in enumerate(context.remaining_todos[:10], 1):
+            item = self.loader.format_template(
+                self.loader.config['todo_templates']['todo_item'],
                 {
-                    'todo_items': todo_list_str,
-                    'session_id': supervisor_analysis.get('session_id', 'unknown'),
-                    'task_numbers': supervisor_analysis.get('task_numbers', 'N/A')
+                    'number': i,
+                    'todo_text': todo
                 }
             )
-        else:
-            prompt_context['remaining_todos'] = "=== NO REMAINING TODOS ===\nAll previous TODOs have been completed."
+            remaining_items.append(item)
+        
+        todo_list_str = "\n".join(remaining_items)
+        return self.loader.format_template(
+            self.loader.config['todo_templates']['todo_list'],
+            {
+                'todo_items': todo_list_str,
+                'session_id': supervisor_analysis.get('session_id', 'unknown'),
+                'task_numbers': supervisor_analysis.get('task_numbers', 'N/A')
+            }
+        )
+
+    def _generate_issues_section(self, context: ExecutionContext) -> str:
+        """Generate the issues section"""
+        if not context.issues_encountered:
+            return ""
             
-        # Generate issues section
-        if context.issues_encountered:
-            issue_list = "\n".join([f"⚠️  {issue}" for issue in context.issues_encountered[-3:]])
-            prompt_context['issues_section'] = self.loader.format_template(
-                self.loader.config['todo_templates']['issues_section'],
-                {'issue_list': issue_list}
-            )
-        else:
-            prompt_context['issues_section'] = ""
+        issue_list = "\n".join([f"⚠️  {issue}" for issue in context.issues_encountered[-3:]])
+        return self.loader.format_template(
+            self.loader.config['todo_templates']['issues_section'],
+            {'issue_list': issue_list}
+        )
+    
+    def generate_continuation_prompt(
+            self,
+            context: ExecutionContext,
+            analysis_guidance: str,
+            supervisor_analysis: Dict[str, Any]
+        ) -> str:
+            """Generate continuation prompt for resumed execution"""
             
-        # Build continuation prompt from sections
-        sections = self.loader.config['agent_prompts']['continuation']['sections']
-        return self.loader.build_prompt_from_sections(sections, prompt_context)
+            # Build prompt context with all sections
+            prompt_context = {
+                'max_turns': context.max_turns,
+                'continuation_type': self._determine_continuation_type(supervisor_analysis),
+                'session_id': supervisor_analysis.get('session_id', 'unknown'),
+                'previous_session_id': supervisor_analysis.get('previous_session_id', 'unknown'),
+                'next_steps_guidance': analysis_guidance,
+                'supervisor_analysis': self._generate_supervisor_analysis_section(supervisor_analysis, analysis_guidance),
+                'task_status_section': self._generate_task_status_section(context),
+                'remaining_todos': self._generate_remaining_todos_section(context, supervisor_analysis),
+                'issues_section': self._generate_issues_section(context)
+            }
+                
+            # Build continuation prompt from sections
+            sections = self.loader.config['agent_prompts']['continuation']['sections']
+            return self.loader.build_prompt_from_sections(sections, prompt_context)
+
     
     def generate_supervisor_analysis_prompt(
         self,
@@ -278,7 +293,7 @@ class PromptGenerator:
         """Generate prompt for supervisor analysis"""
         
         # Truncate output if too long
-        max_output_chars = 3000
+        max_output_chars = MAX_OUTPUT_TRUNCATE_LENGTH
         if len(execution_output) > max_output_chars:
             execution_output = (
                 execution_output[:max_output_chars//2] + 
@@ -336,7 +351,7 @@ class PromptGenerator:
     ) -> str:
         """Generate a final summary for the user"""
         
-        duration_estimate = total_turns * 30  # ~30 sec per turn
+        duration_estimate = total_turns * SECONDS_PER_TURN_ESTIMATE
         
         prompt_context = {
             'executions_count': len(executions),
@@ -401,7 +416,7 @@ class TodoPromptManager:
             remaining_todos=todos.copy()
         )
         self.generator = PromptGenerator(config_path)
-        self.session_id = ""
+        self.session_id = "unknown"
         self.task_numbers = ""
         
     def update_progress(self, completed_todos: List[str], remaining_todos: List[str]):
@@ -440,14 +455,7 @@ class TodoPromptManager:
             previous_executions=previous_executions
         )
         
-    def update_todo_progress(self, completed: List[str], remaining: List[str]):
-        """Update TODO progress in context"""
-        self.context.completed_todos = completed
-        self.context.remaining_todos = remaining
-        
-    def add_issue(self, issue: str):
-        """Add an issue to context"""
-        self.context.issues_encountered.append(issue)
+    
         
     def add_guidance(self, guidance: str):
         """Add guidance to history"""

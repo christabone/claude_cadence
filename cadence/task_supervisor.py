@@ -27,11 +27,16 @@ from .zen_integration import ZenIntegration
 class ExecutionResult:
     """Results from an agent execution"""
     success: bool
-    turns_used: int
+    turns_used: int  # Always 0 - turn counting not possible with stream-json
     output_lines: List[str]
     errors: List[str]
     metadata: Dict[str, Any]
     task_complete: bool
+    # New fields for completion detection
+    completed_normally: bool = False  # Agent said "ALL TASKS COMPLETE"
+    stopped_unexpectedly: bool = False  # Stopped without completion signal
+    requested_help: bool = False  # Agent said "HELP NEEDED"
+
 
 
 class TaskSupervisor:
@@ -374,11 +379,10 @@ Model: {self.model}
             task_ids = [str(task.get('id', '?')) for task in task_list if not task.get('status') == 'done']
             task_numbers = ", ".join(task_ids)
         
-        # Initialize prompt manager if not already done
-        if not hasattr(self, 'prompt_manager'):
-            self.prompt_manager = TodoPromptManager(todos, self.max_turns)
-            self.prompt_manager.session_id = session_id
-            self.prompt_manager.task_numbers = task_numbers
+        # Create new prompt manager for this execution
+        self.prompt_manager = TodoPromptManager(todos, self.max_turns)
+        self.prompt_manager.session_id = session_id
+        self.prompt_manager.task_numbers = task_numbers
             
         # Log task analysis
         self._log_task_analysis(todos, task_list)
@@ -543,23 +547,14 @@ Model: {self.model}
             if stderr_lines:
                 errors.extend(stderr_lines)
                 
-            # We can only estimate turns after execution completes
-            # Claude CLI doesn't provide real-time turn info in stream-json format
-            if turns_used == 0:
-                # Simple estimation based on output - this is not accurate
-                # but gives us something to work with
-                # Count substantive output lines (more than 50 chars)
-                substantive_lines = [line for line in output_lines if len(line) > 50]
-                # Estimate based on substantive output
-                turns_used = min(self.max_turns, max(1, len(substantive_lines)))
-                self.logger.warning(f"Turn count is estimated: {turns_used}")
+            # Turn counting is not possible with Claude CLI stream-json format
+            # We'll detect completion state from output patterns instead
                     
             success = process.returncode == 0
             
         except subprocess.TimeoutExpired:
             success = False
             errors.append(f"Agent execution timed out after {self.timeout} seconds")
-            turns_used = self.max_turns
             self.logger.error(f"Execution timeout after {self.timeout}s")
             
         except Exception as e:
@@ -584,13 +579,21 @@ Model: {self.model}
             "scratchpad_path": f".cadence/scratchpad/session_{session_id}.md"
         }
         
+        # Detect completion patterns
+        completed_normally = "ALL TASKS COMPLETE" in output_text
+        requested_help = "HELP NEEDED" in output_text
+        stopped_unexpectedly = not completed_normally and not requested_help and success
+        
         result = ExecutionResult(
             success=success,
-            turns_used=turns_used,
+            turns_used=0,  # Turn counting not possible
             output_lines=output_lines,
             errors=errors,
             metadata=metadata,
-            task_complete=task_complete
+            task_complete=task_complete,
+            completed_normally=completed_normally,
+            stopped_unexpectedly=stopped_unexpectedly,
+            requested_help=requested_help
         )
         
         # Log execution result
@@ -693,89 +696,98 @@ IMPORTANT:
                     print(f"⚠️  Task analysis failed: {e}")
                     
         return False
+    def _cleanup_session(self, session_id: str):
+        """Clean up resources for a completed session."""
+        self.zen.cleanup_session(session_id)
+        self.logger.info(f"Cleaned up session {session_id}")
         
     def run_with_taskmaster(self, task_file: Optional[str] = None) -> bool:
-        """
-        Run supervisor with Task Master integration
-        
-        Args:
-            task_file: Path to Task Master tasks.json file
+            """
+            Run supervisor with Task Master integration
             
-        Returns:
-            bool: True if all tasks completed successfully
-        """
-        # Load tasks from Task Master
-        task_file = task_file or self.config.integrations["taskmaster"]["default_task_file"]
-        
-        try:
-            task_manager = TaskManager()
-            if not task_manager.load_tasks(task_file):
-                print(f"❌ Failed to load tasks from {task_file}")
-                return False
+            Args:
+                task_file: Path to Task Master tasks.json file
                 
-            print(f"📋 Loaded {len(task_manager.tasks)} tasks from Task Master")
+            Returns:
+                bool: True if all tasks completed successfully
+            """
+            # Load tasks from Task Master
+            task_file = task_file or self.config.integrations["taskmaster"]["default_task_file"]
             
-            # Convert tasks to TODOs
-            todos = []
-            for task in task_manager.tasks:
-                if not task.is_complete():
-                    todo = f"Task {task.id}: {task.title}"
-                    if task.description:
-                        todo += f" - {task.description}"
-                    todos.append(todo)
+            try:
+                task_manager = TaskManager()
+                if not task_manager.load_tasks(task_file):
+                    print(f"❌ Failed to load tasks from {task_file}")
+                    return False
                     
-            if not todos:
-                print("✅ All tasks are already complete!")
-                return True
+                print(f"📋 Loaded {len(task_manager.tasks)} tasks from Task Master")
                 
-            print(f"🎯 {len(todos)} tasks to complete")
-            
-            # Initialize prompt manager with todos
-            self.prompt_manager = TodoPromptManager(todos, self.max_turns)
-            
-            # Generate session ID for this execution
-            session_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_taskmaster"
-            
-            # Execute with TODOs
-            result = self.execute_with_todos(
-                todos=todos,
-                task_list=[t.__dict__ for t in task_manager.tasks],
-                session_id=session_id
-            )
-            
-            # Save execution history
-            self.execution_history.append(result)
-            
-            # Print summary
-            if self.verbose:
-                print(f"\n📈 Execution Summary:")
-                print(f"   - Success: {result.success}")
-                print(f"   - Turns used: {result.turns_used}/{self.max_turns}")
-                print(f"   - Tasks complete: {result.task_complete}")
-                if result.errors:
-                    print(f"   - Errors: {len(result.errors)}")
-                    
-            # Update task status if configured
-            if self.config.integrations["taskmaster"]["auto_update_status"] and result.task_complete:
-                # Update all tasks to complete
+                # Convert tasks to TODOs
+                todos = []
                 for task in task_manager.tasks:
-                    task_manager.update_task_status(task.id, "done")
-                task_manager.save_tasks(task_file)
-                print("✅ Updated task status in Task Master")
-                self._log_supervisor("All tasks marked as complete in Task Master")
+                    if not task.is_complete():
+                        todo = f"Task {task.id}: {task.title}"
+                        if task.description:
+                            todo += f" - {task.description}"
+                        todos.append(todo)
+                        
+                if not todos:
+                    print("✅ All tasks are already complete!")
+                    return True
+                    
+                print(f"🎯 {len(todos)} tasks to complete")
                 
-            # Log final summary
-            self._log_final_summary(self.execution_history)
-            
-            # Log supervisor log location
-            if self.current_log_path and self.verbose:
-                print(f"\n📝 Supervisor log: {self.current_log_path}")
+                # Prompt manager will be created in execute_with_todos
                 
-            return result.task_complete
-            
-        except Exception as e:
-            print(f"❌ Error running with Task Master: {e}")
-            return False
+                # Generate session ID for this execution
+                session_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_taskmaster"
+                
+                try:
+                    # Execute with TODOs
+                    result = self.execute_with_todos(
+                        todos=todos,
+                        task_list=[t.__dict__ for t in task_manager.tasks],
+                        session_id=session_id
+                    )
+                    
+                    # Save execution history
+                    self.execution_history.append(result)
+                    
+                    # Print summary
+                    if self.verbose:
+                        print(f"\n📈 Execution Summary:")
+                        print(f"   - Success: {result.success}")
+                        print(f"   - Turns used: {result.turns_used}/{self.max_turns}")
+                        print(f"   - Tasks complete: {result.task_complete}")
+                        if result.errors:
+                            print(f"   - Errors: {len(result.errors)}")
+                            
+                    # Update task status if configured
+                    if self.config.integrations["taskmaster"]["auto_update_status"] and result.task_complete:
+                        # Update all tasks to complete
+                        for task in task_manager.tasks:
+                            task_manager.update_task_status(task.id, "done")
+                        task_manager.save_tasks(task_file)
+                        print("✅ Updated task status in Task Master")
+                        self._log_supervisor("All tasks marked as complete in Task Master")
+                        
+                    # Log final summary
+                    self._log_final_summary(self.execution_history)
+                    
+                    # Log supervisor log location
+                    if self.current_log_path and self.verbose:
+                        print(f"\n📝 Supervisor log: {self.current_log_path}")
+                        
+                    return result.task_complete
+                    
+                finally:
+                    # Always cleanup session data
+                    self._cleanup_session(session_id)
+                    
+            except Exception as e:
+                print(f"❌ Error running with Task Master: {e}")
+                return False
+
             
     def handle_zen_assistance(self, execution_result: ExecutionResult, 
                             session_id: str) -> Dict[str, Any]:
