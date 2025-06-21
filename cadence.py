@@ -2,7 +2,7 @@
 """
 Claude Cadence CLI
 
-Simple command-line interface for checkpoint supervision.
+Command-line interface for task-driven agent supervision.
 """
 
 import argparse
@@ -11,69 +11,67 @@ from pathlib import Path
 
 # Handle both installed and development usage
 try:
-    from cadence import CheckpointSupervisor
+    from cadence import TaskSupervisor
 except ImportError:
     # Development mode - add current directory to path
     sys.path.insert(0, str(Path(__file__).parent))
-    from cadence import CheckpointSupervisor
+    from cadence import TaskSupervisor
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Claude Cadence - Checkpoint supervision for Claude Code agents",
+        description="Claude Cadence - Task-driven supervision for Claude Code agents",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic supervision with default settings
-  cadence "Write a Python web scraper"
+  # Run with Task Master (default)
+  cadence
   
-  # Custom checkpoint settings
-  cadence --turns 10 --checkpoints 5 "Complex refactoring task"
+  # Custom max turns
+  cadence --max-turns 60
   
   # Use specific model
-  cadence --model claude-3-opus-20240229 "Critical code review"
+  cadence --model claude-3-opus-latest
   
-  # Task Master integration
-  cadence --taskmaster "Complete all project tasks"
+  # Specify task file
+  cadence --task-file .taskmaster/tasks/tasks.json
+  
+  # Manual TODO mode (without Task Master)
+  cadence --todo "Implement user authentication" --todo "Add tests"
 """
     )
     
     parser.add_argument(
-        "prompt",
-        nargs="?",
-        help="Task prompt for the agent (optional with --taskmaster)"
-    )
-    
-    parser.add_argument(
-        "-t", "--turns",
+        "--max-turns",
         type=int,
-        default=15,
-        help="Number of turns per checkpoint (default: 15)"
-    )
-    
-    parser.add_argument(
-        "-c", "--checkpoints",
-        type=int,
-        default=3,
-        help="Maximum number of checkpoints (default: 3)"
+        help="Maximum turns before forcing completion (safety limit)"
     )
     
     parser.add_argument(
         "-m", "--model",
-        default="claude-3-5-sonnet-20241022",
-        help="Claude model to use (default: claude-3-5-sonnet-20241022)"
+        help="Claude model to use"
     )
     
     parser.add_argument(
         "-o", "--output",
-        default="cadence_output",
-        help="Output directory for logs (default: cadence_output)"
+        help="Output directory for logs"
     )
     
     parser.add_argument(
-        "--taskmaster",
-        action="store_true",
-        help="Use Task Master integration if available"
+        "--task-file",
+        help="Path to Task Master tasks.json file"
+    )
+    
+    parser.add_argument(
+        "--todo",
+        action="append",
+        dest="todos",
+        help="Manual TODO item (can be used multiple times)"
+    )
+    
+    parser.add_argument(
+        "--config",
+        help="Path to configuration file"
     )
     
     parser.add_argument(
@@ -84,71 +82,37 @@ Examples:
     
     args = parser.parse_args()
     
-    # Handle Task Master mode
-    if args.taskmaster:
-        try:
-            from cadence.task_manager import TaskManager
-            from examples.taskmaster_guided import TaskGuidedSupervisor
-            
-            supervisor = TaskGuidedSupervisor(
-                project_dir=".",
-                checkpoint_turns=args.turns,
-                max_checkpoints=args.checkpoints,
-                model=args.model,
-                output_dir=args.output,
-                verbose=args.verbose
-            )
-            
-            if supervisor.tasks_loaded:
-                print("✅ Task Master integration enabled")
-                prompt = args.prompt  # Can be None
-            else:
-                print("⚠️  No Task Master tasks found")
-                if not args.prompt:
-                    print("❌ Error: No prompt provided and no tasks found")
-                    sys.exit(1)
-                prompt = args.prompt
-                
-        except ImportError:
-            print("⚠️  Task Master integration not available")
-            if not args.prompt:
-                print("❌ Error: No prompt provided")
-                sys.exit(1)
-            prompt = args.prompt
-            supervisor = CheckpointSupervisor(
-                checkpoint_turns=args.turns,
-                max_checkpoints=args.checkpoints,
-                model=args.model,
-                output_dir=args.output,
-                verbose=args.verbose
-            )
-    else:
-        # Standard mode requires prompt
-        if not args.prompt:
-            parser.print_help()
-            sys.exit(1)
-            
-        prompt = args.prompt
-        supervisor = CheckpointSupervisor(
-            checkpoint_turns=args.turns,
-            max_checkpoints=args.checkpoints,
-            model=args.model,
-            output_dir=args.output,
-            verbose=args.verbose
-        )
+    # Create supervisor
+    supervisor = TaskSupervisor(
+        max_turns=args.max_turns,
+        model=args.model,
+        output_dir=args.output,
+        verbose=args.verbose,
+        config_path=args.config
+    )
     
-    # Run supervision
+    # Run based on mode
     try:
-        success, cost = supervisor.run_supervised_task(prompt)
+        if args.todos:
+            # Manual TODO mode
+            print(f"🎯 Running with {len(args.todos)} manual TODOs")
+            result = supervisor.execute_with_todos(todos=args.todos)
+            success = result.task_complete
+        else:
+            # Task Master mode (default)
+            success = supervisor.run_with_taskmaster(task_file=args.task_file)
         
         # Exit code based on success
         sys.exit(0 if success else 1)
         
     except KeyboardInterrupt:
-        print("\n\n⚠️  Supervision interrupted by user")
+        print("\n\n⚠️  Execution interrupted by user")
         sys.exit(130)
     except Exception as e:
         print(f"\n❌ Error: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
         sys.exit(1)
 
 

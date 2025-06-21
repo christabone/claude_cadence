@@ -1,30 +1,33 @@
 # Claude Cadence Prompt Configuration
-# This file defines all prompts used in the checkpoint supervision system
+# This file defines all prompts used in the task-driven supervision system
 
 # Shared context that appears in all agent prompts
 shared_agent_context:
   supervision_explanation: |
-    === CHECKPOINT SUPERVISION CONTEXT ===
-    You are working under a checkpoint supervision system focused on task completion.
-    Primary goal: Complete your assigned tasks efficiently
-    Safety limit: Maximum {checkpoint_turns} turns before automatic checkpoint
-    Total checkpoints available: {max_checkpoints}
+    === TASK EXECUTION CONTEXT ===
+    You are working under a task-driven supervision system.
+    Primary goal: Complete your assigned TODOs efficiently
+    Safety limit: Maximum {max_turns} turns (not a target)
     
     IMPORTANT: Focus on completing tasks, not counting turns. The turn limit is only a safety measure.
   
   work_guidelines: |
-    TASK COMPLETION PRIORITY:
-    1. Focus on completing assigned tasks, not managing turns
-    2. Work naturally - take the turns you need to finish properly
-    3. Exit immediately when all tasks are complete
-    4. The {checkpoint_turns} turn limit is just a safety net
-    5. Quality completion matters more than speed
+    IMPORTANT - TASK-DRIVEN EXECUTION:
     
-    Progress indicators:
-    - Clearly mark completed tasks with structured output:
-      {"task_complete": {"task_id": "1", "task_title": "Create file X"}}
+    You have up to {max_turns} turns as a safety limit, but this is NOT a target.
+    Your ONLY goal is to complete the assigned TODOs. Work naturally and efficiently.
+    
+    CRITICAL: The moment ALL TODOs are complete, you MUST:
+    1. Declare "ALL TASKS COMPLETE"
+    2. Exit immediately - do not continue working
+    
+    The turn limit exists only to prevent infinite loops. Most tasks should complete
+    well before reaching it.
+    
+    Progress tracking:
+    - Mark completed tasks: {"task_complete": {"task_id": "1", "task_title": "Create file X"}}
     - Note any blockers for supervisor review
-    - State "ALL TASKS COMPLETE" when all tasks are finished
+    - Quality completion matters more than speed
   
   early_exit_protocol: |
     EARLY EXIT PROTOCOL:
@@ -39,49 +42,45 @@ agent_prompts:
       - "{shared_agent_context.supervision_explanation}"
       - "{shared_agent_context.work_guidelines}"
       - "{shared_agent_context.early_exit_protocol}"
-      - "{task_breakdown}"  # Generated dynamically if tasks exist
+      - "{todo_list}"  # Generated dynamically
       - |
         === YOUR OBJECTIVE ===
-        {task_description}
+        Complete all the TODOs listed above.
         
-        Remember: Complete your tasks thoroughly. The turn limit ({checkpoint_turns}) is just a safety net.
-        Begin working on the task now.
+        Remember: Complete your tasks thoroughly. The turn limit ({max_turns}) is just a safety net.
+        Begin working on the TODOs now.
   
-  # Continuation prompt for subsequent checkpoints
+  # Continuation prompt for resumed execution
   continuation:
     sections:
       - |
-        === CHECKPOINT CONTINUATION ===
-        This is checkpoint {current_checkpoint} of {max_checkpoints}.
-        Focus: Complete remaining tasks (turn safety limit: {checkpoint_turns})
+        === TASK CONTINUATION ===
+        You are continuing work on TODOs.
+        Safety limit: {max_turns} turns remaining
+      - "{continuation_context}"  # Previous execution context
       - "{progress_summary}"  # Generated dynamically
-      - "{remaining_work}"    # Generated dynamically
+      - "{remaining_todos}"    # Generated dynamically
       - "{issues_section}"    # Generated dynamically if issues exist
       - |
         === SUPERVISOR GUIDANCE ===
         {supervisor_guidance}
-      - "{checkpoint_warnings}"  # Generated for final checkpoints
       - "{shared_agent_context.work_guidelines}"
       - |
-        === ORIGINAL OBJECTIVE (for context) ===
-        {original_task}
-        
-        Continue working to complete all tasks.
-        Remember: When all tasks are done, state 'ALL TASKS COMPLETE' and exit immediately.
+        Continue working to complete all remaining TODOs.
+        Remember: When all TODOs are done, state 'ALL TASKS COMPLETE' and exit immediately.
 
-# Task-specific templates
-task_templates:
-  task_breakdown: |
-    === TASK BREAKDOWN ===
-    The following tasks need to be completed:
+# TODO-specific templates
+todo_templates:
+  todo_list: |
+    === YOUR TODOS ===
+    The following TODOs need to be completed:
     
-    {task_list}
+    {todo_items}
     
-    Focus on completing tasks systematically. Mark your progress clearly.
-    When all tasks show ✅, state 'ALL TASKS COMPLETE' and exit immediately.
+    Focus on completing these systematically. 
+    When all are done, state 'ALL TASKS COMPLETE' and exit immediately.
   
-  task_item: "{status_icon} Task {task_id}: {task_title}"
-  task_details: "   Details: {task_description}"
+  todo_item: "{number}. {todo_text}"
   
   progress_summary: |
     === COMPLETED WORK ===
@@ -97,16 +96,12 @@ task_templates:
     === ISSUES TO ADDRESS ===
     {issue_list}
 
-# Checkpoint-specific warnings
-checkpoint_warnings:
-  final: |
-    ⚠️  THIS IS YOUR FINAL CHECKPOINT!
+# Execution-specific warnings
+execution_warnings:
+  final_turns: |
+    ⚠️  APPROACHING TURN LIMIT!
+    You are near the {max_turns} turn safety limit.
     Focus on completing the most critical remaining work.
-    Ensure the solution is functional even if not all features are complete.
-  
-  penultimate: |
-    📍 You have only 1 checkpoint remaining after this one.
-    Prioritize core functionality and critical tasks.
 
 # Supervisor analysis prompts
 supervisor_prompts:
@@ -114,25 +109,24 @@ supervisor_prompts:
     sections:
       - |
         === SUPERVISOR ANALYSIS TASK ===
-        You are a senior software architect reviewing checkpoint progress.
+        You are a senior software architect reviewing task progress.
         Analyze the work done and provide strategic guidance.
         
-        Checkpoint: {current_checkpoint} of {max_checkpoints}
-        Turns used: {turns_used}
+        Turns used: {turns_used} of {max_turns}
       - |
         === ORIGINAL OBJECTIVE ===
         {original_task}
       - "{task_progress}"  # Generated if tasks exist
-      - "{checkpoint_history}"  # Generated from previous checkpoints
+      - "{execution_history}"  # Generated from previous executions
       - |
-        === CHECKPOINT OUTPUT TO ANALYZE ===
-        {checkpoint_output}
+        === EXECUTION OUTPUT TO ANALYZE ===
+        {execution_output}
       - |
         === ANALYSIS REQUIRED ===
         Provide a strategic analysis covering:
         1. Is the agent making appropriate progress toward the objective?
         2. Are there any critical issues or blockers?
-        3. What specific guidance would help the next checkpoint?
+        3. What specific guidance would help complete remaining TODOs?
         4. Should the agent adjust priorities or approach?
         
         Be specific and actionable in your guidance.
@@ -145,28 +139,25 @@ supervisor_prompts:
     Completed: {completed_count} tasks
     Remaining: {remaining_count} tasks
   
-  checkpoint_history_template: |
-    === CHECKPOINT HISTORY ===
+  execution_history_template: |
+    === EXECUTION HISTORY ===
     {history_items}
   
-  history_item: "Checkpoint {num}: {summary}"
+  history_item: "Execution {num}: {summary}"
 
 # Final summary template
 final_summary:
   template: |
     === SUPERVISION SESSION COMPLETE ===
-    Total checkpoints used: {checkpoints_used} of {max_checkpoints}
-    Total estimated cost: ${total_cost:.4f}
+    Total executions: {executions_count}
+    Total turns used: {total_turns}
     Estimated duration: ~{duration_minutes} minutes
-    
-    === OBJECTIVE ===
-    {original_task}
     
     {completed_section}
     {incomplete_section}
     
-    === CHECKPOINT PROGRESSION ===
-    {checkpoint_progression}
+    === EXECUTION PROGRESSION ===
+    {execution_progression}
     
     {recommendations}
   

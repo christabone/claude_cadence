@@ -2,22 +2,22 @@
 
 **🚧 UNDER CONSTRUCTION - NOT YET FUNCTIONAL 🚧**
 
-A checkpoint-based supervision system for Claude Code agent execution. Implements periodic turn-limited execution with inter-checkpoint analysis and guided continuation.
+A task-driven supervision system for Claude Code agent execution. Manages agent execution through Task Master integration, with agents working on TODOs until completion.
 
 **Note: This project is actively being developed and is not ready for use. The architecture is being designed and core components are still being implemented.**
 
 ## Overview
 
-Claude Cadence enables external turn management, progress monitoring, and corrective guidance injection for long-running AI agent tasks. It leverages Claude Code's `--max-turns` and `--continue` flags to enforce deterministic checkpoint intervals with supervisor-driven course correction between execution phases.
+Claude Cadence provides a framework for managing Claude Code agents through task-based execution. The supervisor uses Task Master to get and track tasks, then provides TODOs to agents who work until all tasks are complete or a maximum turn limit is reached.
 
 ## Features
 
-- **Checkpoint Execution**: Run agents for fixed turn intervals using `--max-turns`
-- **Progress Analysis**: Analyze agent output between checkpoints to assess task completion
-- **Guided Continuation**: Resume execution with corrective guidance using `--continue`
-- **Task Integration**: Optional Task Master MCP integration for structured task tracking
-- **Cost Tracking**: Monitor token usage and costs across checkpoints
-- **Flexible Supervision**: Configurable checkpoint intervals and supervision strategies
+- **Task-Driven Execution**: Agents work on specific TODOs from the supervisor
+- **Task Master Integration**: Supervisor manages tasks using Task Master
+- **Natural Completion**: Agents work until tasks are done, not until turns run out
+- **Safety Limits**: Maximum turn limits prevent runaway execution
+- **Progress Tracking**: Monitor task completion and execution status
+- **Flexible Configuration**: YAML-based configuration for all settings
 
 ## Installation
 
@@ -30,51 +30,65 @@ pip install -r requirements.txt  # Minimal dependencies
 ## Quick Start
 
 ```python
-from cadence import CheckpointSupervisor
+from cadence import TaskSupervisor
 
-# Create supervisor with 15-turn checkpoints
-supervisor = CheckpointSupervisor(checkpoint_turns=15, max_checkpoints=3)
+# Create supervisor with max turns safety limit
+supervisor = TaskSupervisor(max_turns=40)
 
-# Run supervised task
-result = supervisor.run_supervised_task(
-    "Validate the GeneCards database and create YAML output"
-)
+# Run with Task Master integration
+success = supervisor.run_with_taskmaster()
 ```
 
 ## How It Works
 
-1. **Spawn**: Launch an agent with specific tasks (turn limit as safety net)
-2. **Execute**: Agent works naturally until tasks complete OR hits turn limit
-3. **Checkpoint**: Execution pauses when agent exits or reaches turn limit
-4. **Analyze**: Supervisor reviews progress and completion status
-5. **Guide**: Provide guidance if tasks remain incomplete
-6. **Repeat**: Continue until all tasks are done or max checkpoints reached
+1. **Load Tasks**: Supervisor loads tasks from Task Master
+2. **Create TODOs**: Convert incomplete tasks into TODO items for agent
+3. **Execute**: Agent works on TODOs until complete or max turns reached
+4. **Track Progress**: Monitor task completion through structured markers
+5. **Update Status**: Update task status in Task Master when complete
 
-**Key Philosophy**: Task completion drives the process, not turn counting. Agents work naturally and exit when done. Turn limits are just safety nets to prevent runaway execution.
+**Key Philosophy**: Task completion drives the process. Agents work naturally until TODOs are done. Turn limits exist only as safety nets to prevent infinite loops.
 
 ## Architecture
 
-Claude Cadence implements a supervisor-executor pattern where:
+Claude Cadence implements a supervisor-agent pattern where:
 
-- **Executor** (Claude Sonnet) focuses on completing assigned tasks
-- **Supervisor** (Claude Opus or custom logic) monitors progress and provides guidance
-- **Checkpoints** occur when tasks complete OR safety turn limit is reached
-- **Continuation** only happens if tasks remain incomplete
+- **Supervisor** uses Task Master to manage tasks and track progress
+- **Agent** receives TODOs and works until completion
+- **Execution** continues until all tasks complete or safety limit is hit
+- **No arbitrary checkpoints** - only task completion or safety limits stop execution
 
-This ensures agents work efficiently toward task completion rather than managing turn budgets.
+This ensures agents focus on completing work rather than managing execution windows.
+
+## Configuration
+
+Configuration is managed through `config.yaml`:
+
+```yaml
+execution:
+  max_turns: 40         # Safety limit, not a target
+  timeout: 600          # Execution timeout in seconds
+  
+agent:
+  model: "claude-3-5-sonnet-20241022"
+  tools: ["bash", "read", "write", "edit", ...]
+  
+supervisor:
+  model: "heuristic"    # or "claude-3-opus-latest" for LLM supervision
+  verbose: true
+```
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) - Detailed system design
-- [API Reference](docs/api.md) - Class and method documentation
-- [Patterns](docs/patterns.md) - Best practices and usage patterns
-- [Examples](examples/) - Working examples for common use cases
+- [Architecture](docs/architecture.md) - System design details
+- [Configuration](docs/configuration.md) - Configuration options
+- [Examples](examples/) - Usage examples
 
 ## Requirements
 
 - Python 3.8+
 - Claude Code CLI installed (`npm install -g @anthropic-ai/claude-code`)
-- Optional: Task Master MCP for structured task management
+- Task Master MCP server for task management
 
 ## License
 
@@ -90,7 +104,7 @@ If you use Claude Cadence in your research or projects, please cite:
 
 ```
 @software{claude_cadence,
-  title = {Claude Cadence: Checkpoint-based Supervision for AI Agents},
+  title = {Claude Cadence: Task-Driven Supervision for AI Agents},
   author = {Chris Tabone},
   year = {2024},
   url = {https://github.com/christabone/claude_cadence}

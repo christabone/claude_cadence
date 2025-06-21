@@ -1,0 +1,117 @@
+# Claude Cadence Configuration
+# This file defines the default settings for checkpoint supervision
+
+# Execution settings
+execution:
+  # Safety limit: Maximum turns before forcing completion
+  # This is NOT a target - agents should complete tasks naturally
+  # This only prevents runaway execution
+  max_turns: 40
+  # Timeout for each execution period (seconds)
+  timeout: 600
+  # Whether to save execution logs
+  save_logs: true
+  # Log directory (relative to working directory)
+  log_dir: ".cadence/logs"
+
+# Agent configuration
+agent:
+  # Model to use for the main agent execution
+  model: "claude-3-5-sonnet-20241022"
+  # Tools available to the agent
+  # Comment out any tools you want to disable
+  tools:
+    - bash
+    - read
+    - write
+    - edit
+    - grep
+    - glob
+    - search
+    - todo_read
+    - todo_write
+    - mcp
+  # Additional claude CLI flags
+  extra_flags:
+    - "--dangerously-skip-permissions"
+
+# Supervisor configuration
+supervisor:
+  # Model to use for checkpoint analysis
+  # Options: "heuristic" (built-in), "claude-3-opus-latest", "claude-3-5-sonnet-20241022"
+  model: "heuristic"
+  # Confidence threshold for intervention (0.0-1.0)
+  intervention_threshold: 0.7
+  # Whether to show detailed analysis
+  verbose: true
+  # Analysis features to enable
+  analysis:
+    check_errors: true
+    check_task_completion: true
+    check_progress_indicators: true
+    check_blockers: true
+
+# Task completion detection
+task_detection:
+  # Methods to use for detecting task completion (in priority order)
+  methods:
+    - "structured_json"     # Look for {"task_complete": {...}} markers
+    - "all_tasks_phrase"    # Look for "ALL TASKS COMPLETE" declaration
+    - "keyword_analysis"    # Analyze completion keywords near task references
+  # Keywords that indicate completion
+  completion_keywords:
+    - "completed"
+    - "done"
+    - "finished"
+    - "implemented"
+    - "fixed"
+    - "resolved"
+    - "added"
+    - "created"
+
+
+# Session management
+session:
+  # Whether to save session summaries
+  save_summaries: true
+  # Summary directory (relative to working directory)
+  summary_dir: ".cadence/sessions"
+  # Include checkpoint details in summary
+  include_checkpoint_details: true
+
+# Integration settings
+integrations:
+  # Task Master integration
+  taskmaster:
+    enabled: true
+    # Path to tasks.json file (can be overridden)
+    default_task_file: ".taskmaster/tasks/tasks.json"
+    # Whether to update task status automatically
+    auto_update_status: true
+  
+  # MCP (Model Context Protocol) settings
+  mcp:
+    # Whether to auto-discover MCP servers
+    auto_discover: true
+    # Specific MCP servers to enable for agents
+    servers:
+      - "taskmaster-ai"
+      - "github"
+      - "filesystem"
+
+# Prompt customization
+prompts:
+  # Path to custom prompts.yaml file (optional)
+  # Leave empty to use built-in prompts
+  custom_prompts_file: ""
+  # Whether to include timestamp in prompts
+  include_timestamp: true
+
+# Development settings
+development:
+  # Enable debug output
+  debug: false
+  # Save raw claude output
+  save_raw_output: false
+  # Pretty print JSON in logs
+  pretty_json: true

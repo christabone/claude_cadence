@@ -2,7 +2,7 @@
 Prompt management for Claude Cadence
 
 This module handles the generation and management of prompts for both
-supervisors and agents, maintaining context across checkpoints.
+supervisors and agents, maintaining context across executions.
 """
 
 from typing import List, Dict, Optional, Any
@@ -14,16 +14,15 @@ import re
 
 
 @dataclass
-class PromptContext:
-    """Maintains context across checkpoint boundaries"""
-    original_task: str
-    current_checkpoint: int
-    max_checkpoints: int
-    checkpoint_turns: int
-    completed_tasks: List[str] = field(default_factory=list)
-    remaining_tasks: List[str] = field(default_factory=list)
+class ExecutionContext:
+    """Maintains context across execution boundaries"""
+    todos: List[str]
+    max_turns: int
+    completed_todos: List[str] = field(default_factory=list)
+    remaining_todos: List[str] = field(default_factory=list)
     issues_encountered: List[str] = field(default_factory=list)
     previous_guidance: List[str] = field(default_factory=list)
+    continuation_context: Optional[str] = None
 
 
 class YAMLPromptLoader:
@@ -112,50 +111,34 @@ class PromptGenerator:
         """Initialize with optional custom config path"""
         self.loader = YAMLPromptLoader(config_path)
     
-    def generate_initial_agent_prompt(
+    def generate_initial_todo_prompt(
         self,
-        task_description: str,
-        checkpoint_turns: int,
-        max_checkpoints: int,
-        task_list: Optional[List[Dict]] = None
+        todos: List[str],
+        max_turns: int
     ) -> str:
-        """Generate the initial prompt for the agent"""
+        """Generate the initial prompt for the agent with TODOs"""
         
         context = {
-            'checkpoint_turns': checkpoint_turns,
-            'max_checkpoints': max_checkpoints,
-            'task_description': task_description
+            'max_turns': max_turns
         }
         
-        # Generate task breakdown if tasks provided
-        if task_list:
-            task_items = []
-            for task in task_list:
-                status_icon = "✅" if task.get('status') == 'done' else "⏳"
-                item = self.loader.format_template(
-                    self.loader.config['task_templates']['task_item'],
-                    {
-                        'status_icon': status_icon,
-                        'task_id': task.get('id', '?'),
-                        'task_title': task.get('title', 'Untitled')
-                    }
-                )
-                task_items.append(item)
-                
-                if task.get('description'):
-                    details = self.loader.format_template(
-                        self.loader.config['task_templates']['task_details'],
-                        {'task_description': task['description']}
-                    )
-                    task_items.append(details)
-                    
-            task_list_str = "\n".join(task_items)
-            context['task_breakdown'] = self.loader.format_template(
-                self.loader.config['task_templates']['task_breakdown'],
-                {'task_list': task_list_str}
+        # Generate TODO list
+        todo_items = []
+        for i, todo in enumerate(todos, 1):
+            item = self.loader.format_template(
+                self.loader.config['todo_templates']['todo_item'],
+                {
+                    'number': i,
+                    'todo_text': todo
+                }
             )
-        else:
-            context['task_breakdown'] = ""
+            todo_items.append(item)
+            
+        todo_list_str = "\n".join(todo_items)
+        context['todo_list'] = self.loader.format_template(
+            self.loader.config['todo_templates']['todo_list'],
+            {'todo_items': todo_list_str}
+        )
             
         # Build initial prompt from sections
         sections = self.loader.config['agent_prompts']['initial']['sections']
@@ -163,58 +146,56 @@ class PromptGenerator:
     
     def generate_continuation_prompt(
         self,
-        context: PromptContext,
-        analysis_guidance: str,
-        checkpoint_summary: Dict
+        context: ExecutionContext,
+        analysis_guidance: str
     ) -> str:
-        """Generate continuation prompt for subsequent checkpoints"""
+        """Generate continuation prompt for resumed execution"""
         
         prompt_context = {
-            'current_checkpoint': context.current_checkpoint,
-            'max_checkpoints': context.max_checkpoints,
-            'checkpoint_turns': context.checkpoint_turns,
+            'max_turns': context.max_turns,
             'supervisor_guidance': analysis_guidance,
-            'original_task': context.original_task
+            'continuation_context': context.continuation_context or ""
         }
         
         # Generate progress summary if needed
-        if context.completed_tasks:
-            completed_items = "\n".join([f"✅ {task}" for task in context.completed_tasks[-5:]])
+        if context.completed_todos:
+            completed_items = "\n".join([f"✅ {todo}" for todo in context.completed_todos[-5:]])
             prompt_context['progress_summary'] = self.loader.format_template(
-                self.loader.config['task_templates']['progress_summary'],
+                self.loader.config['todo_templates']['progress_summary'],
                 {'completed_items': completed_items}
             )
         else:
             prompt_context['progress_summary'] = ""
             
-        # Generate remaining work section
-        if context.remaining_tasks:
-            remaining_items = "\n".join([f"⏳ {task}" for task in context.remaining_tasks[:5]])
-            prompt_context['remaining_work'] = self.loader.format_template(
-                self.loader.config['task_templates']['remaining_work'],
-                {'remaining_items': remaining_items}
+        # Generate remaining TODOs section
+        if context.remaining_todos:
+            remaining_items = []
+            for i, todo in enumerate(context.remaining_todos[:10], 1):
+                item = self.loader.format_template(
+                    self.loader.config['todo_templates']['todo_item'],
+                    {
+                        'number': i,
+                        'todo_text': todo
+                    }
+                )
+                remaining_items.append(item)
+            
+            prompt_context['remaining_todos'] = self.loader.format_template(
+                self.loader.config['todo_templates']['remaining_work'],
+                {'remaining_items': "\n".join(remaining_items)}
             )
         else:
-            prompt_context['remaining_work'] = ""
+            prompt_context['remaining_todos'] = ""
             
         # Generate issues section
         if context.issues_encountered:
             issue_list = "\n".join([f"⚠️  {issue}" for issue in context.issues_encountered[-3:]])
             prompt_context['issues_section'] = self.loader.format_template(
-                self.loader.config['task_templates']['issues_section'],
+                self.loader.config['todo_templates']['issues_section'],
                 {'issue_list': issue_list}
             )
         else:
             prompt_context['issues_section'] = ""
-            
-        # Add checkpoint-specific warnings
-        remaining_checkpoints = context.max_checkpoints - context.current_checkpoint
-        if remaining_checkpoints == 0:
-            prompt_context['checkpoint_warnings'] = self.loader.config['checkpoint_warnings']['final']
-        elif remaining_checkpoints == 1:
-            prompt_context['checkpoint_warnings'] = self.loader.config['checkpoint_warnings']['penultimate']
-        else:
-            prompt_context['checkpoint_warnings'] = ""
             
         # Build continuation prompt from sections
         sections = self.loader.config['agent_prompts']['continuation']['sections']
@@ -222,86 +203,82 @@ class PromptGenerator:
     
     def generate_supervisor_analysis_prompt(
         self,
-        checkpoint_output: str,
-        context: PromptContext,
-        previous_checkpoints: List[Dict]
+        execution_output: str,
+        context: ExecutionContext,
+        previous_executions: List[Dict]
     ) -> str:
         """Generate prompt for supervisor analysis"""
         
         # Truncate output if too long
         max_output_chars = 3000
-        if len(checkpoint_output) > max_output_chars:
-            checkpoint_output = (
-                checkpoint_output[:max_output_chars//2] + 
+        if len(execution_output) > max_output_chars:
+            execution_output = (
+                execution_output[:max_output_chars//2] + 
                 "\n\n[... OUTPUT TRUNCATED ...]\n\n" + 
-                checkpoint_output[-max_output_chars//2:]
+                execution_output[-max_output_chars//2:]
             )
             
         prompt_context = {
-            'current_checkpoint': context.current_checkpoint,
-            'max_checkpoints': context.max_checkpoints,
-            'turns_used': context.checkpoint_turns,
-            'original_task': context.original_task,
-            'checkpoint_output': checkpoint_output
+            'max_turns': context.max_turns,
+            'turns_used': 0,  # Will be set by supervisor
+            'execution_output': execution_output
         }
         
         # Add task progress if available
-        if context.completed_tasks or context.remaining_tasks:
+        if context.completed_todos or context.remaining_todos:
             prompt_context['task_progress'] = self.loader.format_template(
                 self.loader.config['supervisor_prompts']['task_progress_template'],
                 {
-                    'completed_count': len(context.completed_tasks),
-                    'remaining_count': len(context.remaining_tasks)
+                    'completed_count': len(context.completed_todos),
+                    'remaining_count': len(context.remaining_todos)
                 }
             )
         else:
             prompt_context['task_progress'] = ""
             
-        # Add checkpoint history
-        if previous_checkpoints:
+        # Add execution history
+        if previous_executions:
             history_items = []
-            for cp in previous_checkpoints[-2:]:  # Last 2 checkpoints
+            for i, exec in enumerate(previous_executions[-2:], 1):  # Last 2 executions
                 item = self.loader.format_template(
                     self.loader.config['supervisor_prompts']['history_item'],
                     {
-                        'num': cp['num'],
-                        'summary': cp.get('summary', 'No summary available')
+                        'num': i,
+                        'summary': exec.get('summary', 'No summary available')
                     }
                 )
                 history_items.append(item)
                 
-            prompt_context['checkpoint_history'] = self.loader.format_template(
-                self.loader.config['supervisor_prompts']['checkpoint_history_template'],
+            prompt_context['execution_history'] = self.loader.format_template(
+                self.loader.config['supervisor_prompts']['execution_history_template'],
                 {'history_items': "\n".join(history_items)}
             )
         else:
-            prompt_context['checkpoint_history'] = ""
+            prompt_context['execution_history'] = ""
             
         # Build supervisor prompt from sections
         sections = self.loader.config['supervisor_prompts']['analysis']['sections']
         return self.loader.build_prompt_from_sections(sections, prompt_context)
     
-    def generate_final_summary_prompt(
+    def generate_final_summary(
         self,
-        all_checkpoints: List[Dict],
-        context: PromptContext,
-        total_cost: float
+        executions: List[Dict],
+        context: ExecutionContext,
+        total_turns: int
     ) -> str:
         """Generate a final summary for the user"""
         
-        duration_estimate = len(all_checkpoints) * context.checkpoint_turns * 30  # ~30 sec per turn
+        duration_estimate = total_turns * 30  # ~30 sec per turn
         
         prompt_context = {
-            'checkpoints_used': len(all_checkpoints),
-            'max_checkpoints': context.max_checkpoints,
-            'total_cost': total_cost,
-            'duration_minutes': duration_estimate // 60,
-            'original_task': context.original_task
+            'executions_count': len(executions),
+            'total_turns': total_turns,
+            'duration_minutes': duration_estimate // 60
         }
         
         # Add completed tasks section
-        if context.completed_tasks:
-            completed_list = "\n".join([f"✅ {task}" for task in context.completed_tasks])
+        if context.completed_todos:
+            completed_list = "\n".join([f"✅ {todo}" for todo in context.completed_todos])
             prompt_context['completed_section'] = self.loader.format_template(
                 self.loader.config['final_summary']['completed_section'],
                 {'completed_list': completed_list}
@@ -310,8 +287,8 @@ class PromptGenerator:
             prompt_context['completed_section'] = ""
             
         # Add incomplete tasks section
-        if context.remaining_tasks:
-            incomplete_list = "\n".join([f"❌ {task}" for task in context.remaining_tasks])
+        if context.remaining_todos:
+            incomplete_list = "\n".join([f"❌ {todo}" for todo in context.remaining_todos])
             prompt_context['incomplete_section'] = self.loader.format_template(
                 self.loader.config['final_summary']['incomplete_section'],
                 {'incomplete_list': incomplete_list}
@@ -319,18 +296,18 @@ class PromptGenerator:
         else:
             prompt_context['incomplete_section'] = ""
             
-        # Add checkpoint progression
+        # Add execution progression
         progression_lines = []
-        for i, cp in enumerate(all_checkpoints, 1):
-            status = "✅" if cp.get('success') else "⚠️"
+        for i, exec in enumerate(executions, 1):
+            status = "✅" if exec.get('success') else "⚠️"
             progression_lines.append(
-                f"{status} Checkpoint {i}: {cp.get('summary', 'No summary')}"
+                f"{status} Execution {i}: {exec.get('summary', 'No summary')}"
             )
-        prompt_context['checkpoint_progression'] = "\n".join(progression_lines)
+        prompt_context['execution_progression'] = "\n".join(progression_lines)
         
         # Add recommendations if tasks remain
-        if context.remaining_tasks:
-            focus_items = "\n".join([f"- {task}" for task in context.remaining_tasks[:3]])
+        if context.remaining_todos:
+            focus_items = "\n".join([f"- {todo}" for todo in context.remaining_todos[:3]])
             prompt_context['recommendations'] = self.loader.format_template(
                 self.loader.config['final_summary']['recommendations'],
                 {'focus_items': focus_items}
@@ -345,52 +322,45 @@ class PromptGenerator:
         )
 
 
-class ContextAwarePromptManager:
-    """Manages prompts with full context awareness across checkpoints"""
+class TodoPromptManager:
+    """Manages prompts for TODO-based execution"""
     
-    def __init__(self, original_task: str, checkpoint_turns: int, max_checkpoints: int, 
+    def __init__(self, todos: List[str], max_turns: int, 
                  config_path: Optional[str] = None):
-        self.context = PromptContext(
-            original_task=original_task,
-            current_checkpoint=1,
-            max_checkpoints=max_checkpoints,
-            checkpoint_turns=checkpoint_turns
+        self.context = ExecutionContext(
+            todos=todos,
+            max_turns=max_turns,
+            remaining_todos=todos.copy()
         )
         self.generator = PromptGenerator(config_path)
         
-    def get_initial_prompt(self, task_list: Optional[List[Dict]] = None) -> str:
-        """Get the initial agent prompt"""
-        return self.generator.generate_initial_agent_prompt(
-            task_description=self.context.original_task,
-            checkpoint_turns=self.context.checkpoint_turns,
-            max_checkpoints=self.context.max_checkpoints,
-            task_list=task_list
+    def get_initial_prompt(self) -> str:
+        """Get the initial agent prompt with TODOs"""
+        return self.generator.generate_initial_todo_prompt(
+            todos=self.context.todos,
+            max_turns=self.context.max_turns
         )
         
-    def get_continuation_prompt(self, analysis_guidance: str, checkpoint_summary: Dict) -> str:
-        """Get continuation prompt for next checkpoint"""
+    def get_continuation_prompt(self, analysis_guidance: str, continuation_context: str) -> str:
+        """Get continuation prompt for resumed execution"""
+        self.context.continuation_context = continuation_context
         return self.generator.generate_continuation_prompt(
             context=self.context,
-            analysis_guidance=analysis_guidance,
-            checkpoint_summary=checkpoint_summary
+            analysis_guidance=analysis_guidance
         )
-    
-    def advance_to_next_checkpoint(self):
-        """Increment the checkpoint counter"""
-        self.context.current_checkpoint += 1
         
-    def get_supervisor_prompt(self, checkpoint_output: str, previous_checkpoints: List[Dict]) -> str:
+    def get_supervisor_prompt(self, execution_output: str, previous_executions: List[Dict]) -> str:
         """Get supervisor analysis prompt"""
         return self.generator.generate_supervisor_analysis_prompt(
-            checkpoint_output=checkpoint_output,
+            execution_output=execution_output,
             context=self.context,
-            previous_checkpoints=previous_checkpoints
+            previous_executions=previous_executions
         )
         
-    def update_task_progress(self, completed: List[str], remaining: List[str]):
-        """Update task progress in context"""
-        self.context.completed_tasks = completed
-        self.context.remaining_tasks = remaining
+    def update_todo_progress(self, completed: List[str], remaining: List[str]):
+        """Update TODO progress in context"""
+        self.context.completed_todos = completed
+        self.context.remaining_todos = remaining
         
     def add_issue(self, issue: str):
         """Add an issue to context"""
@@ -400,10 +370,10 @@ class ContextAwarePromptManager:
         """Add guidance to history"""
         self.context.previous_guidance.append(guidance)
         
-    def get_final_summary(self, all_checkpoints: List[Dict], total_cost: float) -> str:
+    def get_final_summary(self, executions: List[Dict], total_turns: int) -> str:
         """Get final summary for the user"""
-        return self.generator.generate_final_summary_prompt(
-            all_checkpoints=all_checkpoints,
+        return self.generator.generate_final_summary(
+            executions=executions,
             context=self.context,
-            total_cost=total_cost
+            total_turns=total_turns
         )
