@@ -1,0 +1,651 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Documentation Setup",
+        "description": "Create the initial project structure and documentation as specified in the PRD.",
+        "details": "1. Create the analysis directory structure: `analysis/alliance/agr_mcp/`\n2. Initialize the project structure with README.md containing:\n   - Project overview and objectives\n   - MCP server usage instructions (placeholder for now)\n   - High-level architecture description\n3. Create the directory structure as outlined in the PRD:\n```\nagr_mcp/\n├── src/\n│   ├── __init__.py\n│   ├── server.py\n│   ├── tools/\n│   │   ├── __init__.py\n│   │   ├── gene_query.py\n│   │   ├── file_download.py\n│   │   └── api_schema.py\n│   ├── utils/\n│   │   ├── __init__.py\n│   │   ├── http_client.py\n│   │   ├── file_manager.py\n│   │   ├── validators.py\n│   │   └── logging_config.py\n│   ├── errors.py\n│   └── config.py\n├── tests/\n│   ├── test_gene_query.py\n│   ├── test_file_download.py\n│   ├── test_server.py\n│   └── test_error_handling.py\n├── logs/\n├── pyproject.toml\n└── requirements.txt\n```\n4. Create initial `pyproject.toml` with project metadata and dependencies\n5. Create initial `requirements.txt` with the following dependencies:\n   - mcp-sdk\n   - httpx\n   - pytest\n   - pytest-asyncio\n   - pytest-cov",
+        "testStrategy": "Verify that all directories and files are created with the correct structure. Ensure README.md contains all required sections. Validate that pyproject.toml and requirements.txt include all necessary dependencies.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create Directory Structure and README",
+            "description": "Initialize the project directory structure and create a comprehensive README.md file with project overview and documentation.",
+            "dependencies": [],
+            "details": "1. Create the main directory structure: `analysis/alliance/agr_mcp/`\n2. Create the README.md file with sections for project overview, objectives, MCP server usage instructions (placeholder), and high-level architecture description\n3. Create all subdirectories as specified in the PRD: src/ (with tools/ and utils/ subdirectories), tests/, and logs/\n4. Create empty __init__.py files in all Python package directories",
+            "status": "pending",
+            "testStrategy": "Verify all directories and files exist in the correct structure using a simple script or manual inspection"
+          },
+          {
+            "id": 2,
+            "title": "Set Up Project Configuration Files",
+            "description": "Create the project configuration files including pyproject.toml and requirements.txt with all necessary dependencies.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Create pyproject.toml with project metadata including name, version, description, authors, and Python version requirements\n2. Configure build system (e.g., setuptools) in pyproject.toml\n3. Create requirements.txt with the specified dependencies: mcp-sdk, httpx, pytest, pytest-asyncio, pytest-cov\n4. Add any additional development dependencies that might be needed",
+            "status": "pending",
+            "testStrategy": "Verify the files can be properly parsed and dependencies can be installed using pip"
+          },
+          {
+            "id": 3,
+            "title": "Create Source File Templates",
+            "description": "Create template files for all source code modules with appropriate docstrings and basic structure.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Create src/server.py with basic server setup and placeholder functions\n2. Create tool modules (gene_query.py, file_download.py, api_schema.py) with function stubs and docstrings\n3. Create utility modules (http_client.py, file_manager.py, validators.py, logging_config.py) with basic implementations\n4. Create errors.py with custom exception classes\n5. Create config.py with configuration variables and settings",
+            "status": "pending",
+            "testStrategy": "Ensure all Python files are syntactically valid by running a linter or attempting to import them"
+          },
+          {
+            "id": 4,
+            "title": "Create Test File Templates",
+            "description": "Create template files for all test modules with basic test cases for each component.",
+            "dependencies": [
+              3
+            ],
+            "details": "1. Create test_gene_query.py with test cases for gene query functionality\n2. Create test_file_download.py with test cases for file download functionality\n3. Create test_server.py with test cases for server endpoints and functionality\n4. Create test_error_handling.py with test cases for error handling scenarios\n5. Set up test fixtures and mocks as needed",
+            "status": "pending",
+            "testStrategy": "Run pytest to verify the test structure is valid, even if tests are just placeholders at this stage"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Research and Document AGR API Structure",
+        "description": "Research the Alliance of Genome Resources API structure, document endpoints, and understand data formats.",
+        "details": "1. Explore the AGR API at https://www.alliancegenome.org/api/\n2. Document the following API endpoints in detail:\n   - Gene summary endpoint: `/api/gene/{gene_id}`\n   - Any other relevant endpoints for gene data\n3. Create a markdown document in the analysis directory that includes:\n   - Base URL information\n   - Authentication requirements (note that it's public)\n   - Available endpoints with descriptions\n   - Request/response formats with examples\n   - Rate limiting information\n   - Error response formats\n4. Test sample requests using curl or httpx to verify endpoint behavior\n5. Document the structure of the downloads page at https://www.alliancegenome.org/downloads\n   - Identify how files are organized\n   - Document file naming patterns\n   - Note file formats available (tab-delimited, GFF3, etc.)\n6. Create sample response objects for each endpoint to guide implementation",
+        "testStrategy": "Verify documentation accuracy by making test API calls to the documented endpoints. Ensure all required information is captured. Have another team member review the documentation for completeness.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Explore and Document AGR API Base Structure",
+            "description": "Explore the Alliance of Genome Resources API base structure, authentication requirements, and general organization.",
+            "dependencies": [],
+            "details": "1. Visit the AGR API at https://www.alliancegenome.org/api/\n2. Document the base URL structure\n3. Identify authentication requirements (confirm it's public)\n4. Document rate limiting information if available\n5. Create the initial markdown document in the analysis directory with these findings\n6. Document the general API structure and organization\n7. Test basic connectivity using curl or httpx",
+            "status": "pending",
+            "testStrategy": "Verify API accessibility with simple GET requests to the base URL and document response headers for rate limiting information."
+          },
+          {
+            "id": 2,
+            "title": "Document Gene-Related API Endpoints",
+            "description": "Research and document all gene-related API endpoints, focusing on the gene summary endpoint and other relevant gene data endpoints.",
+            "dependencies": [],
+            "details": "1. Explore the gene summary endpoint: `/api/gene/{gene_id}`\n2. Identify other gene-related endpoints\n3. For each endpoint, document:\n   - Full URL path\n   - Available query parameters\n   - Response structure\n4. Create sample requests using different gene IDs\n5. Document the response format with examples\n6. Add this information to the markdown document\n7. Create sample response objects for implementation reference",
+            "status": "pending",
+            "testStrategy": "Test each endpoint with at least 3 different gene IDs to verify consistent behavior and document any variations in response structure."
+          },
+          {
+            "id": 3,
+            "title": "Research and Document Downloads Page Structure",
+            "description": "Analyze the AGR downloads page to understand file organization, naming patterns, and available formats.",
+            "dependencies": [],
+            "details": "1. Visit the downloads page at https://www.alliancegenome.org/downloads\n2. Document how files are organized (by species, data type, etc.)\n3. Identify and document file naming patterns\n4. List all available file formats (tab-delimited, GFF3, etc.)\n5. Note any versioning information for the downloads\n6. Document the frequency of updates if available\n7. Add this information to the markdown document",
+            "status": "pending",
+            "testStrategy": "Download sample files of each format to verify accessibility and document the structure of each file type."
+          },
+          {
+            "id": 4,
+            "title": "Create Comprehensive API Documentation with Examples",
+            "description": "Finalize the API documentation by adding detailed examples, error handling information, and implementation guidance.",
+            "dependencies": [],
+            "details": "1. Consolidate all findings into a comprehensive markdown document\n2. Add detailed request/response examples for each endpoint\n3. Document error response formats and error codes\n4. Create a section on best practices for using the API\n5. Add implementation guidance for common use cases\n6. Include sample code snippets for API interaction\n7. Document any limitations or constraints of the API\n8. Finalize the sample response objects for implementation reference",
+            "status": "pending",
+            "testStrategy": "Review documentation for completeness by attempting to implement a simple client that uses the API based solely on the documentation provided."
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Implement Custom Error Classes",
+        "description": "Create custom exception classes for handling different types of errors in the MCP server.",
+        "details": "1. Create `src/errors.py` with the following custom exception classes:\n```python\nclass AGRBaseError(Exception):\n    \"\"\"Base exception class for all AGR MCP server errors.\"\"\"\n    def __init__(self, message, status_code=None, details=None):\n        self.message = message\n        self.status_code = status_code\n        self.details = details or {}\n        super().__init__(self.message)\n\nclass AGRAPIError(AGRBaseError):\n    \"\"\"Exception raised for errors returned by the AGR API.\"\"\"\n    pass\n\nclass AGRNetworkError(AGRBaseError):\n    \"\"\"Exception raised for network-related errors when connecting to AGR.\"\"\"\n    pass\n\nclass AGRValidationError(AGRBaseError):\n    \"\"\"Exception raised for input validation errors.\"\"\"\n    pass\n\nclass AGRFileSystemError(AGRBaseError):\n    \"\"\"Exception raised for file system related errors during downloads.\"\"\"\n    pass\n```\n2. Implement error serialization methods to convert exceptions to structured responses\n3. Add helper functions to create standardized error responses\n4. Document each exception class with examples of when they should be used",
+        "testStrategy": "Write unit tests for each exception class to verify they can be instantiated with the correct attributes. Test serialization methods to ensure they produce the expected output format.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create Base Error Classes in errors.py",
+            "description": "Create the src/errors.py file and implement the base error classes with proper initialization and inheritance structure.",
+            "dependencies": [],
+            "details": "1. Create the `src/errors.py` file\n2. Implement the `AGRBaseError` class that inherits from `Exception` with the specified constructor parameters (message, status_code, details)\n3. Implement the four derived error classes: `AGRAPIError`, `AGRNetworkError`, `AGRValidationError`, and `AGRFileSystemError`\n4. Add docstrings for each class explaining their purpose and usage scenarios",
+            "status": "pending",
+            "testStrategy": "Write unit tests to verify that each error class can be instantiated with different parameters and that the inheritance hierarchy works correctly."
+          },
+          {
+            "id": 2,
+            "title": "Implement Error Serialization Methods",
+            "description": "Add methods to convert exceptions to structured JSON responses that can be returned by API endpoints.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Add a `to_dict()` method to `AGRBaseError` that returns a dictionary with keys for 'error', 'message', 'status_code', and 'details'\n2. Add a `to_json()` method that returns a JSON string representation of the error\n3. Ensure all derived classes inherit these serialization methods\n4. Add any class-specific serialization logic for specialized error types if needed",
+            "status": "pending",
+            "testStrategy": "Test that errors can be properly serialized to dictionaries and JSON strings with all expected fields present and correctly formatted."
+          },
+          {
+            "id": 3,
+            "title": "Create Error Response Helper Functions",
+            "description": "Implement utility functions to create standardized error responses for API endpoints and logging.",
+            "dependencies": [
+              2
+            ],
+            "details": "1. Add a `create_error_response(exception)` function that takes an AGRBaseError and returns a properly formatted API response\n2. Implement a `format_error_for_logging(exception)` function that formats errors for consistent log entries\n3. Create helper functions for common error scenarios (e.g., `create_validation_error()`, `create_api_error()`)\n4. Include HTTP status code mapping for different error types",
+            "status": "pending",
+            "testStrategy": "Test that helper functions generate the expected response structures and that HTTP status codes are correctly mapped to different error types."
+          },
+          {
+            "id": 4,
+            "title": "Document Error Classes with Usage Examples",
+            "description": "Enhance documentation for all error classes with detailed examples of when and how to use each type of exception.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "1. Expand docstrings for each error class with specific usage examples\n2. Create a module-level docstring explaining the error handling philosophy\n3. Add code examples showing how to raise and catch each type of exception\n4. Document best practices for error handling throughout the application\n5. Include examples of how to use the helper functions from subtask 3",
+            "status": "pending",
+            "testStrategy": "Review documentation for completeness and clarity. Ensure examples are accurate by testing them in isolation."
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Implement Configuration Module",
+        "description": "Create a configuration module to manage server settings and defaults.",
+        "details": "1. Create `src/config.py` with the following configuration settings:\n```python\nfrom typing import Dict, Any\nimport os\n\nclass Config:\n    # API Configuration\n    BASE_URL = os.environ.get('AGR_BASE_URL', 'https://www.alliancegenome.org')\n    API_TIMEOUT = int(os.environ.get('AGR_API_TIMEOUT', 30))  # seconds\n    \n    # Rate Limiting\n    MAX_REQUESTS_PER_SECOND = int(os.environ.get('AGR_MAX_RPS', 10))\n    \n    # Retry Configuration\n    MAX_RETRIES = int(os.environ.get('AGR_MAX_RETRIES', 3))\n    RETRY_BACKOFF_FACTOR = float(os.environ.get('AGR_RETRY_BACKOFF', 0.5))\n    \n    # File Download Configuration\n    DEFAULT_DOWNLOAD_DIR = os.environ.get('AGR_DOWNLOAD_DIR', os.path.join(os.getcwd(), 'downloads'))\n    MAX_DOWNLOAD_SIZE = int(os.environ.get('AGR_MAX_DOWNLOAD_SIZE', 1024 * 1024 * 1024))  # 1GB default\n    \n    # Logging Configuration\n    LOG_LEVEL = os.environ.get('AGR_LOG_LEVEL', 'INFO')\n    LOG_DIR = os.environ.get('AGR_LOG_DIR', os.path.join(os.getcwd(), 'logs'))\n    LOG_FILE_MAX_SIZE = int(os.environ.get('AGR_LOG_FILE_MAX_SIZE', 100 * 1024 * 1024))  # 100MB\n    LOG_FILE_BACKUP_COUNT = int(os.environ.get('AGR_LOG_FILE_BACKUP_COUNT', 5))\n    \n    # Caching Configuration\n    ENABLE_CACHING = os.environ.get('AGR_ENABLE_CACHING', 'False').lower() == 'true'\n    CACHE_TTL = int(os.environ.get('AGR_CACHE_TTL', 3600))  # 1 hour default\n    \n    @classmethod\n    def as_dict(cls) -> Dict[str, Any]:\n        \"\"\"Return configuration as a dictionary.\"\"\"\n        return {k: v for k, v in cls.__dict__.items() \n                if not k.startswith('__') and not callable(getattr(cls, k))}\n```\n2. Add validation methods to ensure configuration values are within acceptable ranges\n3. Implement a method to load configuration from a file (optional)\n4. Add documentation for each configuration option",
+        "testStrategy": "Write unit tests to verify that configuration values can be set via environment variables. Test the validation methods with valid and invalid values. Verify the as_dict method returns the expected dictionary.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create Basic Config Class with Environment Variables",
+            "description": "Implement the Config class with environment variable loading for all required configuration settings",
+            "dependencies": [],
+            "details": "Create the src/config.py file and implement the Config class with class variables for all configuration settings. Each setting should be loaded from environment variables with appropriate default values. Include the as_dict() method to return configuration as a dictionary. Ensure proper type casting for numeric values.",
+            "status": "pending",
+            "testStrategy": "Write unit tests to verify environment variables are correctly loaded with proper defaults and type conversion."
+          },
+          {
+            "id": 2,
+            "title": "Add Configuration Validation Methods",
+            "description": "Implement validation methods to ensure configuration values are within acceptable ranges",
+            "dependencies": [],
+            "details": "Add a validate() class method to Config that checks all configuration values against acceptable ranges (e.g., timeouts are positive, URLs are valid). Implement specific validation for each type of configuration value. The method should raise ValueError with descriptive messages for invalid configurations. Add a validate_on_load flag to automatically validate when the class is initialized.",
+            "status": "pending",
+            "testStrategy": "Create tests with invalid configurations (negative timeouts, malformed URLs, etc.) and verify appropriate validation errors are raised."
+          },
+          {
+            "id": 3,
+            "title": "Implement Configuration File Loading",
+            "description": "Add functionality to load configuration from JSON, YAML, or INI files",
+            "dependencies": [],
+            "details": "Create a from_file() class method that accepts a file path and optional format parameter. Implement parsers for common formats (JSON, YAML, INI). The method should load the file, parse it according to format, and override default configuration values. Handle file not found and parsing errors gracefully. Update the Config class to merge file-based configuration with environment variables (with environment variables taking precedence).",
+            "status": "pending",
+            "testStrategy": "Test loading various file formats with different configurations and verify the correct precedence order between file values and environment variables."
+          },
+          {
+            "id": 4,
+            "title": "Add Documentation and Usage Examples",
+            "description": "Document each configuration option and provide usage examples",
+            "dependencies": [],
+            "details": "Add detailed docstrings for the Config class and each configuration option, explaining purpose, acceptable values, and default behavior. Create a __doc__ string for the module with usage examples. Add type hints for all methods. Create a separate markdown file (CONFIG.md) with comprehensive documentation on all configuration options, environment variable names, and file-based configuration examples. Include a section on extending the configuration for custom needs.",
+            "status": "pending",
+            "testStrategy": "Verify documentation completeness with a documentation coverage tool. Ensure all examples in the documentation work as expected."
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Implement Logging Configuration",
+        "description": "Set up centralized logging with proper log rotation and formatting.",
+        "details": "1. Create `src/utils/logging_config.py` with the following implementation:\n```python\nimport logging\nimport os\nimport sys\nfrom logging.handlers import RotatingFileHandler\nfrom typing import Optional\nimport uuid\n\nfrom ..config import Config\n\nclass RequestIdFilter(logging.Filter):\n    \"\"\"Filter that adds request_id to log records.\"\"\"\n    def __init__(self, request_id: Optional[str] = None):\n        super().__init__()\n        self.request_id = request_id or str(uuid.uuid4())\n\n    def filter(self, record):\n        record.request_id = self.request_id\n        return True\n\ndef setup_logging(logger_name: str = 'agr_mcp'):\n    \"\"\"Configure logging for the AGR MCP server.\"\"\"\n    logger = logging.getLogger(logger_name)\n    \n    # Set log level from config\n    log_level = getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO)\n    logger.setLevel(log_level)\n    \n    # Create formatters\n    console_formatter = logging.Formatter(\n        '%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] - %(message)s'\n    )\n    file_formatter = logging.Formatter(\n        '%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] - %(filename)s:%(lineno)d - %(message)s'\n    )\n    \n    # Create console handler\n    console_handler = logging.StreamHandler(sys.stdout)\n    console_handler.setFormatter(console_formatter)\n    console_handler.setLevel(log_level)\n    \n    # Create file handler with rotation\n    os.makedirs(Config.LOG_DIR, exist_ok=True)\n    log_file_path = os.path.join(Config.LOG_DIR, f'{logger_name}.log')\n    file_handler = RotatingFileHandler(\n        log_file_path,\n        maxBytes=Config.LOG_FILE_MAX_SIZE,\n        backupCount=Config.LOG_FILE_BACKUP_COUNT\n    )\n    file_handler.setFormatter(file_formatter)\n    file_handler.setLevel(log_level)\n    \n    # Add request ID filter\n    request_id_filter = RequestIdFilter()\n    console_handler.addFilter(request_id_filter)\n    file_handler.addFilter(request_id_filter)\n    \n    # Add handlers to logger\n    logger.addHandler(console_handler)\n    logger.addHandler(file_handler)\n    \n    return logger\n\ndef get_logger(name: str):\n    \"\"\"Get a logger with the given name.\"\"\"\n    return logging.getLogger(f'agr_mcp.{name}')\n```\n2. Ensure log directory is created if it doesn't exist\n3. Implement log rotation based on file size (100MB) and keep 5 backup files\n4. Add request ID tracking for correlation across log entries\n5. Create convenience function to get a logger for each module",
+        "testStrategy": "Write unit tests to verify that loggers are created with the correct configuration. Test log rotation by generating log entries that exceed the maximum file size. Verify that request IDs are properly added to log entries.",
+        "priority": "medium",
+        "dependencies": [
+          4
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create logging configuration module",
+            "description": "Create the basic logging configuration module with RequestIdFilter class and setup_logging function",
+            "dependencies": [],
+            "details": "Create `src/utils/logging_config.py` with the RequestIdFilter class for adding request IDs to log records and the setup_logging function that initializes the logger with basic configuration. Ensure the module imports all necessary dependencies and defines the proper function signatures.",
+            "status": "pending",
+            "testStrategy": "Write unit tests to verify the RequestIdFilter adds request IDs to log records and that setup_logging returns a properly configured logger instance."
+          },
+          {
+            "id": 2,
+            "title": "Implement log handlers with formatters",
+            "description": "Add console and file handlers with appropriate formatters to the logging configuration",
+            "dependencies": [],
+            "details": "Extend the setup_logging function to create and configure both console and file handlers. The console handler should output to stdout with a simpler format, while the file handler should use a more detailed format. Create formatters that include timestamp, logger name, log level, request ID, and for file logs, also include filename and line number.",
+            "status": "pending",
+            "testStrategy": "Test that both handlers are properly added to the logger and that they use the correct formatters. Verify log messages appear in both console and file outputs with the expected format."
+          },
+          {
+            "id": 3,
+            "title": "Implement log rotation and directory creation",
+            "description": "Add log rotation based on file size and ensure the log directory exists",
+            "dependencies": [],
+            "details": "Modify the file handler to use RotatingFileHandler with maxBytes=Config.LOG_FILE_MAX_SIZE (100MB) and backupCount=Config.LOG_FILE_BACKUP_COUNT (5). Add code to create the log directory (Config.LOG_DIR) if it doesn't exist using os.makedirs with exist_ok=True. Ensure the log file path is constructed correctly using os.path.join.",
+            "status": "pending",
+            "testStrategy": "Test that the log directory is created if it doesn't exist and that log rotation occurs when the file size exceeds the configured maximum. Verify that old log files are preserved up to the specified backup count."
+          },
+          {
+            "id": 4,
+            "title": "Create get_logger utility function",
+            "description": "Implement a convenience function to get a logger for each module",
+            "dependencies": [],
+            "details": "Add the get_logger function that takes a name parameter and returns a logger with the name prefixed with 'agr_mcp.' (e.g., 'agr_mcp.module_name'). This function should be simple and just call logging.getLogger with the properly formatted name. Update any existing code to use this function instead of directly creating loggers.",
+            "status": "pending",
+            "testStrategy": "Test that get_logger returns a logger with the correct name format and that it inherits the configuration from the main logger. Verify it can be imported and used from different modules in the project."
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Implement HTTP Client with Retry Logic",
+        "description": "Create a shared HTTP client with retry logic, rate limiting, and proper error handling.",
+        "details": "1. Create `src/utils/http_client.py` with the following implementation:\n```python\nimport asyncio\nimport time\nfrom typing import Dict, Any, Optional, Union\n\nimport httpx\nfrom httpx import Response\n\nfrom ..config import Config\nfrom ..errors import AGRAPIError, AGRNetworkError\nfrom .logging_config import get_logger\n\nlogger = get_logger('http_client')\n\nclass AGRHttpClient:\n    \"\"\"HTTP client for Alliance of Genome Resources API with retry logic.\"\"\"\n    \n    def __init__(self):\n        self.base_url = Config.BASE_URL\n        self.timeout = Config.API_TIMEOUT\n        self.max_retries = Config.MAX_RETRIES\n        self.backoff_factor = Config.RETRY_BACKOFF_FACTOR\n        self.rate_limit = Config.MAX_REQUESTS_PER_SECOND\n        self._last_request_time = 0\n        self._request_times = []\n    \n    async def _respect_rate_limit(self):\n        \"\"\"Ensure we don't exceed the rate limit.\"\"\"\n        current_time = time.time()\n        \n        # Remove request timestamps older than 1 second\n        self._request_times = [t for t in self._request_times if current_time - t < 1.0]\n        \n        # If we've hit the rate limit, wait until we can make another request\n        if len(self._request_times) >= self.rate_limit:\n            wait_time = 1.0 - (current_time - self._request_times[0])\n            if wait_time > 0:\n                logger.debug(f\"Rate limit reached, waiting {wait_time:.2f} seconds\")\n                await asyncio.sleep(wait_time)\n        \n        # Add current request to the list\n        self._request_times.append(time.time())\n    \n    async def request(\n        self, \n        method: str, \n        url: str, \n        params: Optional[Dict[str, Any]] = None,\n        headers: Optional[Dict[str, str]] = None,\n        json: Optional[Dict[str, Any]] = None,\n        timeout: Optional[int] = None,\n    ) -> Response:\n        \"\"\"Make an HTTP request with retry logic.\"\"\"\n        if not url.startswith(('http://', 'https://')):\n            url = f\"{self.base_url.rstrip('/')}/{url.lstrip('/')}\"\n        \n        timeout = timeout or self.timeout\n        headers = headers or {}\n        \n        # Add default headers\n        if 'Accept' not in headers:\n            headers['Accept'] = 'application/json'\n        \n        retry_count = 0\n        last_exception = None\n        \n        while retry_count <= self.max_retries:\n            try:\n                # Respect rate limiting\n                await self._respect_rate_limit()\n                \n                start_time = time.time()\n                async with httpx.AsyncClient(timeout=timeout) as client:\n                    response = await client.request(\n                        method=method,\n                        url=url,\n                        params=params,\n                        headers=headers,\n                        json=json,\n                    )\n                \n                request_time = time.time() - start_time\n                logger.debug(f\"{method} {url} completed in {request_time:.2f}s with status {response.status_code}\")\n                \n                # Handle API errors\n                if response.status_code >= 400:\n                    error_data = {}\n                    try:\n                        error_data = response.json()\n                    except Exception:\n                        error_data = {'text': response.text}\n                    \n                    if response.status_code >= 500:\n                        # Server errors are retryable\n                        if retry_count < self.max_retries:\n                            retry_count += 1\n                            wait_time = self.backoff_factor * (2 ** retry_count)\n                            logger.warning(f\"Server error {response.status_code}, retrying in {wait_time:.2f}s\")\n                            await asyncio.sleep(wait_time)\n                            continue\n                    \n                    # Client errors or max retries reached for server errors\n                    raise AGRAPIError(\n                        message=f\"API error: {response.status_code}\",\n                        status_code=response.status_code,\n                        details=error_data\n                    )\n                \n                return response\n            \n            except httpx.TimeoutException as e:\n                last_exception = AGRNetworkError(\n                    message=\"Request timed out\",\n                    details={\"url\": url, \"timeout\": timeout}\n                )\n            except httpx.ConnectError as e:\n                last_exception = AGRNetworkError(\n                    message=\"Connection error\",\n                    details={\"url\": url, \"error\": str(e)}\n                )\n            except httpx.RequestError as e:\n                last_exception = AGRNetworkError(\n                    message=\"Request error\",\n                    details={\"url\": url, \"error\": str(e)}\n                )\n            except Exception as e:\n                if isinstance(e, AGRAPIError):\n                    raise\n                last_exception = AGRNetworkError(\n                    message=f\"Unexpected error: {str(e)}\",\n                    details={\"url\": url, \"error\": str(e)}\n                )\n            \n            # Retry logic for network errors\n            if retry_count < self.max_retries:\n                retry_count += 1\n                wait_time = self.backoff_factor * (2 ** retry_count)\n                logger.warning(f\"Request failed, retrying in {wait_time:.2f}s (attempt {retry_count}/{self.max_retries})\")\n                await asyncio.sleep(wait_time)\n            else:\n                logger.error(f\"Max retries reached for {url}\")\n                raise last_exception\n\n    async def get(self, url: str, **kwargs) -> Response:\n        \"\"\"Make a GET request.\"\"\"\n        return await self.request('GET', url, **kwargs)\n\n    async def post(self, url: str, **kwargs) -> Response:\n        \"\"\"Make a POST request.\"\"\"\n        return await self.request('POST', url, **kwargs)\n\n    async def get_json(self, url: str, **kwargs) -> Dict[str, Any]:\n        \"\"\"Make a GET request and return JSON response.\"\"\"\n        response = await self.get(url, **kwargs)\n        return response.json()\n\n# Create a singleton instance\nhttp_client = AGRHttpClient()\n```\n2. Implement rate limiting to respect AGR API limits (10 requests/second)\n3. Add exponential backoff for retries with configurable max retries\n4. Include detailed logging of request/response times and status codes\n5. Handle different types of network errors and convert to custom exceptions",
+        "testStrategy": "Write unit tests with mocked HTTP responses to test retry logic, rate limiting, and error handling. Test with various response status codes (200, 404, 500) and network errors. Verify that exponential backoff works correctly.",
+        "priority": "high",
+        "dependencies": [
+          3,
+          4,
+          5
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create HTTP Client Base Structure",
+            "description": "Implement the basic structure of the AGRHttpClient class with initialization and core request method.",
+            "dependencies": [],
+            "details": "Create `src/utils/http_client.py` with the AGRHttpClient class. Implement the constructor with configuration parameters (base_url, timeout, max_retries, backoff_factor, rate_limit). Create the request method skeleton that handles URL formatting and default headers. Implement the convenience methods (get, post, get_json) that call the main request method. Create the singleton instance at the module level.",
+            "status": "pending",
+            "testStrategy": "Write unit tests for initialization with different config values and test the URL formatting logic with relative and absolute URLs."
+          },
+          {
+            "id": 2,
+            "title": "Implement Rate Limiting Logic",
+            "description": "Add rate limiting functionality to prevent exceeding API request limits.",
+            "dependencies": [],
+            "details": "Implement the _respect_rate_limit method to track request timestamps and enforce the configured rate limit (default 10 requests/second). Use a sliding window approach by maintaining a list of recent request times and removing timestamps older than 1 second. Calculate wait time when rate limit is reached and use asyncio.sleep to pause execution. Integrate this method into the request flow to be called before each API request.",
+            "status": "pending",
+            "testStrategy": "Test with mock time functions to verify rate limiting behavior. Create tests that simulate rapid requests and verify appropriate delays are added."
+          },
+          {
+            "id": 3,
+            "title": "Add Retry Logic with Exponential Backoff",
+            "description": "Implement retry mechanism with exponential backoff for handling transient failures.",
+            "dependencies": [],
+            "details": "Enhance the request method to implement retry logic for network errors and 5xx server errors. Use the configured max_retries and backoff_factor to calculate wait times between retries using the formula: backoff_factor * (2 ** retry_count). Implement proper exception handling for different types of httpx exceptions (TimeoutException, ConnectError, RequestError) and convert them to custom AGRNetworkError exceptions with appropriate context information. Ensure that client errors (4xx) are not retried but immediately raised as AGRAPIError.",
+            "status": "pending",
+            "testStrategy": "Test retry behavior by mocking httpx client to simulate different error scenarios. Verify correct number of retries and backoff timing for different error types."
+          },
+          {
+            "id": 4,
+            "title": "Implement Logging and Error Handling",
+            "description": "Add comprehensive logging and finalize error handling for the HTTP client.",
+            "dependencies": [],
+            "details": "Integrate the logging system to record request/response times, status codes, and retry attempts. Log debug information for successful requests including timing information. Log warnings for retryable errors and errors for non-retryable failures. Implement proper error handling to convert HTTP errors to domain-specific exceptions (AGRAPIError for API errors, AGRNetworkError for network issues). Include relevant context in error objects such as URL, status code, and response body when available.",
+            "status": "pending",
+            "testStrategy": "Test logging output with different request scenarios. Verify that appropriate information is logged at the correct levels. Test error handling by simulating various error conditions and checking that the correct custom exceptions are raised with the expected context information."
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Implement Input Validation Utilities",
+        "description": "Create validation utilities for gene IDs, file types, and other user inputs.",
+        "details": "1. Create `src/utils/validators.py` with the following implementation:\n```python\nimport re\nimport os\nfrom typing import List, Optional, Union, Dict, Any\n\nfrom ..errors import AGRValidationError\nfrom .logging_config import get_logger\n\nlogger = get_logger('validators')\n\n# Regular expressions for validation\nGENE_ID_PATTERN = re.compile(r'^([A-Za-z]+):([\\w\\d]+)$')  # e.g., MGI:123456, FB:FBgn0000001\nFILE_TYPE_PATTERN = re.compile(r'^[\\w\\-\\.]+$')  # Alphanumeric with dash, underscore, dot\n\n# Valid model organism prefixes\nVALID_ORGANISM_PREFIXES = [\n    'MGI',  # Mouse\n    'RGD',  # Rat\n    'SGD',  # Yeast\n    'WB',   # C. elegans (worm)\n    'ZFIN', # Zebrafish\n    'XB',   # Xenopus (frog)\n    'FB',   # Fly\n]\n\n# Valid file types\nVALID_FILE_TYPES = [\n    'gff3',\n    'tab',\n    'csv',\n    'json',\n    'fasta',\n    'obo',\n    'owl',\n    'txt',\n    'gz',\n    'zip',\n]\n\ndef validate_gene_id(gene_id: str) -> str:\n    \"\"\"Validate a gene ID format.\n    \n    Args:\n        gene_id: Gene ID to validate (e.g., MGI:123456)\n        \n    Returns:\n        The validated gene ID\n        \n    Raises:\n        AGRValidationError: If gene ID format is invalid\n    \"\"\"\n    if not gene_id or not isinstance(gene_id, str):\n        raise AGRValidationError(\n            message=\"Gene ID must be a non-empty string\",\n            details={\"provided\": gene_id}\n        )\n    \n    match = GENE_ID_PATTERN.match(gene_id)\n    if not match:\n        raise AGRValidationError(\n            message=\"Invalid gene ID format. Expected format: PREFIX:ID (e.g., MGI:123456)\",\n            details={\"provided\": gene_id, \"pattern\": GENE_ID_PATTERN.pattern}\n        )\n    \n    prefix = match.group(1)\n    if prefix not in VALID_ORGANISM_PREFIXES:\n        raise AGRValidationError(\n            message=f\"Invalid organism prefix: {prefix}\",\n            details={\n                \"provided\": prefix,\n                \"valid_prefixes\": VALID_ORGANISM_PREFIXES\n            }\n        )\n    \n    return gene_id\n\ndef validate_file_type(file_type: str) -> str:\n    \"\"\"Validate a file type.\n    \n    Args:\n        file_type: File type to validate (e.g., gff3, tab)\n        \n    Returns:\n        The validated file type\n        \n    Raises:\n        AGRValidationError: If file type is invalid\n    \"\"\"\n    if not file_type or not isinstance(file_type, str):\n        raise AGRValidationError(\n            message=\"File type must be a non-empty string\",\n            details={\"provided\": file_type}\n        )\n    \n    if not FILE_TYPE_PATTERN.match(file_type):\n        raise AGRValidationError(\n            message=\"Invalid file type format\",\n            details={\"provided\": file_type, \"pattern\": FILE_TYPE_PATTERN.pattern}\n        )\n    \n    file_type = file_type.lower()\n    if file_type not in VALID_FILE_TYPES:\n        raise AGRValidationError(\n            message=f\"Unsupported file type: {file_type}\",\n            details={\n                \"provided\": file_type,\n                \"valid_types\": VALID_FILE_TYPES\n            }\n        )\n    \n    return file_type\n\ndef validate_output_directory(directory: Optional[str] = None) -> str:\n    \"\"\"Validate and create output directory if it doesn't exist.\n    \n    Args:\n        directory: Directory path to validate and create\n        \n    Returns:\n        The validated directory path\n        \n    Raises:\n        AGRValidationError: If directory is invalid or cannot be created\n    \"\"\"\n    from ..config import Config\n    \n    if not directory:\n        directory = Config.DEFAULT_DOWNLOAD_DIR\n    \n    try:\n        os.makedirs(directory, exist_ok=True)\n    except (PermissionError, OSError) as e:\n        raise AGRValidationError(\n            message=f\"Cannot create output directory: {str(e)}\",\n            details={\"directory\": directory, \"error\": str(e)}\n        )\n    \n    if not os.access(directory, os.W_OK):\n        raise AGRValidationError(\n            message=\"Output directory is not writable\",\n            details={\"directory\": directory}\n        )\n    \n    return directory\n\ndef sanitize_filename(filename: str) -> str:\n    \"\"\"Sanitize a filename to prevent path traversal attacks.\n    \n    Args:\n        filename: Filename to sanitize\n        \n    Returns:\n        Sanitized filename\n    \"\"\"\n    # Remove path components\n    filename = os.path.basename(filename)\n    \n    # Replace potentially dangerous characters\n    filename = re.sub(r'[^\\w\\-\\. ]', '_', filename)\n    \n    # Ensure filename is not empty\n    if not filename:\n        filename = \"download\"\n    \n    return filename\n```\n2. Implement validation for gene IDs with proper format checking\n3. Add validation for file types and output directories\n4. Include sanitization functions for filenames to prevent path traversal attacks\n5. Add detailed error messages for validation failures",
+        "testStrategy": "Write unit tests for each validation function with valid and invalid inputs. Test gene ID validation with various formats and prefixes. Test file type validation with supported and unsupported types. Test directory validation with writable and non-writable paths.",
+        "priority": "high",
+        "dependencies": [
+          3,
+          4,
+          5
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create validators.py module structure and implement gene ID validation",
+            "description": "Set up the validators.py module with necessary imports, regular expressions, and implement the gene ID validation function.",
+            "dependencies": [],
+            "details": "Create the file structure at src/utils/validators.py. Import required modules (re, os, typing). Define the GENE_ID_PATTERN regex and VALID_ORGANISM_PREFIXES list. Implement the validate_gene_id function that checks if the gene ID matches the expected pattern and has a valid organism prefix. Ensure proper error handling with AGRValidationError.",
+            "status": "pending",
+            "testStrategy": "Write unit tests that verify validate_gene_id accepts valid gene IDs (e.g., 'MGI:123456') and rejects invalid formats, empty strings, and invalid prefixes."
+          },
+          {
+            "id": 2,
+            "title": "Implement file type validation",
+            "description": "Add file type validation functionality to ensure only supported file types are processed.",
+            "dependencies": [],
+            "details": "Define the FILE_TYPE_PATTERN regex and VALID_FILE_TYPES list in validators.py. Implement the validate_file_type function that checks if the file type is a non-empty string, matches the expected pattern, and is in the list of supported file types. Convert input to lowercase for case-insensitive comparison. Return the validated file type or raise appropriate AGRValidationError with detailed messages.",
+            "status": "pending",
+            "testStrategy": "Test validate_file_type with valid file types (e.g., 'gff3', 'json'), invalid formats, uppercase variants, and unsupported types."
+          },
+          {
+            "id": 3,
+            "title": "Implement directory validation and creation",
+            "description": "Add functionality to validate and create output directories for file operations.",
+            "dependencies": [],
+            "details": "Implement the validate_output_directory function that checks if a directory exists and is writable. If the directory doesn't exist, create it. Handle permissions and OS errors appropriately. Use the Config.DEFAULT_DOWNLOAD_DIR as fallback when no directory is provided. Return the validated directory path or raise AGRValidationError with detailed error information.",
+            "status": "pending",
+            "testStrategy": "Test with existing directories, non-existent directories that can be created, and scenarios where directory creation should fail (e.g., insufficient permissions)."
+          },
+          {
+            "id": 4,
+            "title": "Implement filename sanitization",
+            "description": "Create a function to sanitize filenames to prevent path traversal attacks and ensure safe file operations.",
+            "dependencies": [],
+            "details": "Implement the sanitize_filename function that removes path components using os.path.basename and replaces potentially dangerous characters with underscores using regex. Ensure the function handles edge cases like empty filenames by providing a default name. The function should return a safe filename that can be used for file operations without security risks.",
+            "status": "pending",
+            "testStrategy": "Test with various inputs including filenames with path components (e.g., '../file.txt'), special characters, and empty strings. Verify that the output is always a safe filename."
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Implement File Manager for Downloads",
+        "description": "Create a file manager to handle downloading and storing files from the AGR downloads page.",
+        "details": "1. Create `src/utils/file_manager.py` with the following implementation:\n```python\nimport os\nimport shutil\nimport tempfile\nfrom typing import Optional, Tuple, Dict, Any, BinaryIO, Callable\nimport asyncio\n\nimport httpx\n\nfrom ..config import Config\nfrom ..errors import AGRFileSystemError, AGRNetworkError\nfrom .logging_config import get_logger\nfrom .validators import sanitize_filename, validate_output_directory\n\nlogger = get_logger('file_manager')\n\nclass FileManager:\n    \"\"\"Manager for downloading and handling files from AGR.\"\"\"\n    \n    def __init__(self, output_dir: Optional[str] = None):\n        self.output_dir = validate_output_directory(output_dir)\n    \n    async def download_file(\n        self, \n        url: str, \n        filename: Optional[str] = None,\n        progress_callback: Optional[Callable[[int, int], None]] = None\n    ) -> str:\n        \"\"\"Download a file from the given URL.\n        \n        Args:\n            url: URL to download from\n            filename: Optional filename to save as (if None, extracted from URL)\n            progress_callback: Optional callback function for progress updates\n            \n        Returns:\n            Path to the downloaded file\n            \n        Raises:\n            AGRNetworkError: If download fails due to network issues\n            AGRFileSystemError: If file cannot be saved\n        \"\"\"\n        if not filename:\n            # Extract filename from URL\n            filename = url.split('/')[-1]\n        \n        # Sanitize filename\n        filename = sanitize_filename(filename)\n        output_path = os.path.join(self.output_dir, filename)\n        \n        # Create a temporary file for downloading\n        temp_fd, temp_path = tempfile.mkstemp(prefix='agr_download_')\n        os.close(temp_fd)\n        \n        try:\n            # Check disk space before downloading\n            free_space = shutil.disk_usage(self.output_dir).free\n            if free_space < Config.MAX_DOWNLOAD_SIZE:\n                raise AGRFileSystemError(\n                    message=\"Insufficient disk space for download\",\n                    details={\n                        \"free_space\": free_space,\n                        \"required\": Config.MAX_DOWNLOAD_SIZE\n                    }\n                )\n            \n            # Download the file with progress tracking\n            async with httpx.AsyncClient(timeout=None) as client:\n                async with client.stream('GET', url) as response:\n                    if response.status_code >= 400:\n                        raise AGRNetworkError(\n                            message=f\"Failed to download file: HTTP {response.status_code}\",\n                            status_code=response.status_code,\n                            details={\"url\": url}\n                        )\n                    \n                    # Get content length if available\n                    total_size = int(response.headers.get('content-length', 0))\n                    \n                    # Check if file is too large\n                    if total_size > Config.MAX_DOWNLOAD_SIZE:\n                        raise AGRFileSystemError(\n                            message=\"File is too large to download\",\n                            details={\n                                \"file_size\": total_size,\n                                \"max_size\": Config.MAX_DOWNLOAD_SIZE\n                            }\n                        )\n                    \n                    downloaded_size = 0\n                    with open(temp_path, 'wb') as f:\n                        async for chunk in response.aiter_bytes(chunk_size=8192):\n                            f.write(chunk)\n                            downloaded_size += len(chunk)\n                            \n                            # Call progress callback if provided\n                            if progress_callback and total_size:\n                                progress_callback(downloaded_size, total_size)\n                            \n                            # Periodically yield to event loop\n                            await asyncio.sleep(0)\n            \n            # Move the temporary file to the final location\n            shutil.move(temp_path, output_path)\n            logger.info(f\"Downloaded {url} to {output_path} ({downloaded_size} bytes)\")\n            \n            return output_path\n        \n        except Exception as e:\n            # Clean up temporary file on error\n            if os.path.exists(temp_path):\n                os.unlink(temp_path)\n            \n            if isinstance(e, (AGRNetworkError, AGRFileSystemError)):\n                raise\n            \n            if isinstance(e, httpx.HTTPError):\n                raise AGRNetworkError(\n                    message=f\"HTTP error during download: {str(e)}\",\n                    details={\"url\": url, \"error\": str(e)}\n                )\n            \n            raise AGRFileSystemError(\n                message=f\"Failed to download file: {str(e)}\",\n                details={\"url\": url, \"error\": str(e)}\n            )\n    \n    def cleanup_temp_files(self):\n        \"\"\"Clean up any temporary files created during downloads.\"\"\"\n        temp_dir = tempfile.gettempdir()\n        pattern = 'agr_download_'\n        \n        for filename in os.listdir(temp_dir):\n            if filename.startswith(pattern):\n                try:\n                    os.unlink(os.path.join(temp_dir, filename))\n                    logger.debug(f\"Cleaned up temporary file: {filename}\")\n                except OSError as e:\n                    logger.warning(f\"Failed to clean up temporary file {filename}: {str(e)}\")\n```\n2. Implement file download with progress tracking\n3. Add disk space checking before downloads\n4. Include temporary file handling to prevent partial downloads\n5. Implement cleanup methods for temporary files\n6. Add proper error handling for network and file system errors",
+        "testStrategy": "Write unit tests with mocked HTTP responses to test file downloads. Test with various file sizes and response types. Verify that progress tracking works correctly. Test error handling for network failures and disk space issues.",
+        "priority": "high",
+        "dependencies": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create FileManager class with basic structure",
+            "description": "Implement the core FileManager class with initialization and directory validation",
+            "dependencies": [],
+            "details": "Create the file_manager.py module with imports, logger setup, and the FileManager class constructor. Implement the validate_output_directory function in validators.py to ensure the output directory exists and is writable. Set up the basic class structure with proper docstrings.",
+            "status": "pending",
+            "testStrategy": "Test initialization with valid and invalid directories. Verify error handling when directories don't exist or aren't writable."
+          },
+          {
+            "id": 2,
+            "title": "Implement file download functionality with progress tracking",
+            "description": "Create the download_file method with async HTTP requests and progress callback support",
+            "dependencies": [],
+            "details": "Implement the download_file method using httpx for async downloads. Extract filenames from URLs when not provided. Add progress tracking via the optional callback parameter. Implement the sanitize_filename function in validators.py to ensure safe filenames. Use temporary files during download to prevent partial files.\n<info added on 2025-06-21T22:50:43.463Z>\nImplement the download_file method using httpx for async HTTP requests with streaming capability. The method should support both direct URL downloads and resumable downloads when possible. Extract filenames from URLs or Content-Disposition headers when not explicitly provided. Implement comprehensive progress tracking via the callback parameter that reports: bytes downloaded, total file size, download speed, and estimated time remaining. The callback should be invoked at regular intervals (configurable, default every 1% of progress). Use temporary files during download with atomic move operations on completion to prevent partial or corrupted files. Implement the sanitize_filename function in validators.py to ensure filenames are safe across all supported platforms. Add proper error handling for network interruptions with the ability to resume downloads when supported by the server.\n</info added on 2025-06-21T22:50:43.463Z>",
+            "status": "pending",
+            "testStrategy": "Test downloading files of various sizes. Verify progress callback is invoked correctly. Test with and without explicit filenames. Mock HTTP responses to test various scenarios."
+          },
+          {
+            "id": 3,
+            "title": "Add disk space checking and file size validation",
+            "description": "Implement checks for available disk space and maximum file size limits",
+            "dependencies": [],
+            "details": "Add disk space checking before starting downloads using shutil.disk_usage. Implement content-length header parsing to determine file size. Add validation against Config.MAX_DOWNLOAD_SIZE to prevent downloading files that are too large. Raise appropriate AGRFileSystemError exceptions with detailed messages.",
+            "status": "pending",
+            "testStrategy": "Test with mock responses that exceed size limits. Test with simulated low disk space scenarios. Verify appropriate error messages are generated."
+          },
+          {
+            "id": 4,
+            "title": "Implement error handling and temporary file cleanup",
+            "description": "Add comprehensive error handling and implement cleanup methods for temporary files",
+            "dependencies": [],
+            "details": "Implement the cleanup_temp_files method to remove any leftover temporary files. Add proper exception handling in download_file to catch and convert various errors to AGRNetworkError or AGRFileSystemError with appropriate context. Ensure temporary files are cleaned up when errors occur during download. Add logging for all significant events and errors.",
+            "status": "pending",
+            "testStrategy": "Test error scenarios including network failures, disk write errors, and permission issues. Verify temporary files are properly cleaned up in all scenarios. Test the cleanup_temp_files method directly."
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Implement Gene Query Tool",
+        "description": "Create the gene query tool that interfaces with the AGR REST API to retrieve gene information.",
+        "details": "1. Create `src/tools/gene_query.py` with the following implementation:\n```python\nfrom typing import Dict, Any, Optional, List\n\nfrom ..utils.http_client import http_client\nfrom ..utils.validators import validate_gene_id\nfrom ..utils.logging_config import get_logger\nfrom ..errors import AGRAPIError\n\nlogger = get_logger('gene_query')\n\nclass GeneQueryTool:\n    \"\"\"Tool for querying gene information from the Alliance of Genome Resources API.\"\"\"\n    \n    async def query_gene(\n        self, \n        gene_id: str, \n        include_disease: bool = False,\n        include_expression: bool = False\n    ) -> Dict[str, Any]:\n        \"\"\"Query gene information from AGR API.\n        \n        Args:\n            gene_id: Gene ID to query (e.g., MGI:123456)\n            include_disease: Whether to include disease associations\n            include_expression: Whether to include expression data\n            \n        Returns:\n            Dictionary containing gene information\n            \n        Raises:\n            AGRValidationError: If gene ID is invalid\n            AGRAPIError: If API request fails\n            AGRNetworkError: If network request fails\n        \"\"\"\n        # Validate gene ID\n        validated_gene_id = validate_gene_id(gene_id)\n        \n        # Build query parameters\n        params = {}\n        if include_disease:\n            params['includeDisease'] = 'true'\n        if include_expression:\n            params['includeExpression'] = 'true'\n        \n        try:\n            # Make API request\n            logger.info(f\"Querying gene information for {validated_gene_id}\")\n            response = await http_client.get_json(f\"/api/gene/{validated_gene_id}\", params=params)\n            \n            # Process response\n            result = self._process_gene_response(response)\n            logger.info(f\"Successfully retrieved gene information for {validated_gene_id}\")\n            \n            return result\n        \n        except AGRAPIError as e:\n            if e.status_code == 404:\n                # Specific handling for gene not found\n                logger.warning(f\"Gene not found: {validated_gene_id}\")\n                raise AGRAPIError(\n                    message=f\"Gene not found: {validated_gene_id}\",\n                    status_code=404,\n                    details={\"gene_id\": validated_gene_id}\n                )\n            raise\n    \n    def _process_gene_response(self, response: Dict[str, Any]) -> Dict[str, Any]:\n        \"\"\"Process and structure the gene API response.\n        \n        Args:\n            response: Raw API response\n            \n        Returns:\n            Processed and structured gene information\n        \"\"\"\n        # Extract relevant fields\n        result = {\n            'id': response.get('id'),\n            'symbol': response.get('symbol'),\n            'name': response.get('name'),\n            'synonyms': response.get('synonyms', []),\n            'soTermName': response.get('soTermName'),\n            'organism': None,\n            'chromosomeLocation': None,\n            'diseases': [],\n            'expression': [],\n        }\n        \n        # Extract organism information\n        if 'organism' in response:\n            result['organism'] = {\n                'name': response['organism'].get('name'),\n                'species': response['organism'].get('species'),\n                'taxonId': response['organism'].get('taxonId'),\n            }\n        \n        # Extract chromosome location\n        if 'genomeLocations' in response and response['genomeLocations']:\n            loc = response['genomeLocations'][0]\n            result['chromosomeLocation'] = {\n                'chromosome': loc.get('chromosome'),\n                'startPosition': loc.get('start'),\n                'endPosition': loc.get('end'),\n                'assembly': loc.get('assembly'),\n                'strand': loc.get('strand'),\n            }\n        \n        # Extract disease associations if present\n        if 'diseases' in response and response['diseases']:\n            result['diseases'] = [\n                {\n                    'id': disease.get('id'),\n                    'name': disease.get('name'),\n                    'associationType': disease.get('associationType'),\n                }\n                for disease in response['diseases']\n            ]\n        \n        # Extract expression data if present\n        if 'expression' in response and response['expression']:\n            result['expression'] = [\n                {\n                    'tissue': expr.get('tissue', {}).get('name'),\n                    'stage': expr.get('stage', {}).get('name'),\n                    'assay': expr.get('assay', {}).get('name'),\n                }\n                for expr in response['expression']\n            ]\n        \n        return result\n\n# Create singleton instance\ngene_query_tool = GeneQueryTool()\n```\n2. Implement the query_gene method to retrieve gene information from the AGR API\n3. Add support for optional parameters (include_disease, include_expression)\n4. Process and structure the API response to extract relevant information\n5. Handle specific error cases (e.g., gene not found)\n6. Add detailed logging for debugging",
+        "testStrategy": "Write unit tests with mocked API responses to test gene queries. Test with valid and invalid gene IDs. Test with and without optional parameters. Verify that response processing works correctly for different gene data structures.",
+        "priority": "high",
+        "dependencies": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement validate_gene_id function",
+            "description": "Create the validator function that ensures gene IDs conform to the expected format before making API requests.",
+            "dependencies": [],
+            "details": "Create the `validate_gene_id` function in `src/utils/validators.py` that checks if a gene ID follows the correct format (e.g., MGI:123456, ZFIN:ZDB-GENE-123456-7). The function should validate the prefix (MGI, ZFIN, RGD, etc.) and the ID format. It should return the validated gene ID if valid, or raise an AGRValidationError with a descriptive message if invalid. Include support for common model organism database prefixes.",
+            "status": "pending",
+            "testStrategy": "Write unit tests that verify the function correctly validates proper gene IDs and rejects invalid ones with appropriate error messages."
+          },
+          {
+            "id": 2,
+            "title": "Implement HTTP client for AGR API",
+            "description": "Create the HTTP client utility that will handle all API requests to the Alliance of Genome Resources API.",
+            "dependencies": [],
+            "details": "Create `src/utils/http_client.py` with an HttpClient class that handles GET requests to the AGR API. Implement methods for making requests, handling response status codes, and parsing JSON responses. Include error handling for network issues, timeouts, and API errors. The client should raise appropriate custom exceptions (AGRAPIError, AGRNetworkError) based on the error type. Configure the base URL for the AGR API and implement request timeout handling.",
+            "status": "pending",
+            "testStrategy": "Create mock tests that verify the client correctly handles various response scenarios including successful responses, 404 errors, and network failures."
+          },
+          {
+            "id": 3,
+            "title": "Implement GeneQueryTool core functionality",
+            "description": "Implement the main query_gene method and response processing logic in the GeneQueryTool class.",
+            "dependencies": [],
+            "details": "Create the GeneQueryTool class in `src/tools/gene_query.py` with the query_gene method that uses the http_client to fetch gene data. Implement the _process_gene_response method to extract and structure relevant information from the API response. Include proper error handling for API errors, particularly 404 responses for genes not found. Ensure the method handles the include_disease and include_expression parameters correctly by adding them to the request parameters when specified.",
+            "status": "pending",
+            "testStrategy": "Write integration tests that verify the tool correctly queries gene information and processes the response. Use mock responses to test different scenarios including successful queries and error handling."
+          },
+          {
+            "id": 4,
+            "title": "Implement logging and create singleton instance",
+            "description": "Add comprehensive logging throughout the GeneQueryTool and create a singleton instance for use across the application.",
+            "dependencies": [],
+            "details": "Configure logging using the get_logger function from logging_config.py. Add informative log messages at appropriate points in the code, including info-level logs for successful operations and warning/error logs for issues. Log the gene ID being queried, API request details, and response status. Create a singleton instance of the GeneQueryTool at the module level (gene_query_tool) that can be imported and used throughout the application.",
+            "status": "pending",
+            "testStrategy": "Verify that log messages are correctly generated during different operations by capturing and examining logs during test execution."
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Implement File Download Tool",
+        "description": "Create the file download tool to retrieve files from the AGR downloads page.",
+        "details": "1. Create `src/tools/file_download.py` with the following implementation:\n```python\nimport re\nfrom typing import Dict, Any, Optional, List, Callable\nimport asyncio\n\nfrom bs4 import BeautifulSoup\n\nfrom ..utils.http_client import http_client\nfrom ..utils.file_manager import FileManager\nfrom ..utils.validators import validate_file_type, validate_output_directory\nfrom ..utils.logging_config import get_logger\nfrom ..errors import AGRAPIError, AGRValidationError\n\nlogger = get_logger('file_download')\n\nclass FileDownloadTool:\n    \"\"\"Tool for downloading files from the Alliance of Genome Resources downloads page.\"\"\"\n    \n    def __init__(self):\n        self.downloads_url = \"/downloads\"\n        self.file_manager = FileManager()\n    \n    async def list_available_files(self, file_type: Optional[str] = None, species: Optional[str] = None) -> List[Dict[str, Any]]:\n        \"\"\"List available files from the downloads page.\n        \n        Args:\n            file_type: Optional filter by file type\n            species: Optional filter by species\n            \n        Returns:\n            List of available files with metadata\n            \n        Raises:\n            AGRAPIError: If API request fails\n            AGRNetworkError: If network request fails\n        \"\"\"\n        logger.info(f\"Listing available files (type={file_type}, species={species})\")\n        \n        # Get downloads page HTML\n        response = await http_client.get(self.downloads_url)\n        html_content = response.text\n        \n        # Parse HTML to extract file information\n        files = self._parse_downloads_page(html_content)\n        \n        # Apply filters if specified\n        if file_type:\n            file_type = file_type.lower()\n            files = [f for f in files if f['type'].lower() == file_type]\n        \n        if species:\n            species = species.lower()\n            files = [f for f in files if species in f['species'].lower()]\n        \n        logger.info(f\"Found {len(files)} files matching criteria\")\n        return files\n    \n    async def download_file(\n        self, \n        file_type: str, \n        species: Optional[str] = None,\n        output_dir: Optional[str] = None,\n        progress_callback: Optional[Callable[[int, int], None]] = None\n    ) -> str:\n        \"\"\"Download a file from the AGR downloads page.\n        \n        Args:\n            file_type: Type of file to download (e.g., gff3, tab)\n            species: Optional species filter\n            output_dir: Optional directory to save file\n            progress_callback: Optional callback for download progress\n            \n        Returns:\n            Path to the downloaded file\n            \n        Raises:\n            AGRValidationError: If file type is invalid\n            AGRAPIError: If no matching file is found\n            AGRNetworkError: If download fails\n            AGRFileSystemError: If file cannot be saved\n        \"\"\"\n        # Validate inputs\n        file_type = validate_file_type(file_type)\n        if output_dir:\n            output_dir = validate_output_directory(output_dir)\n            self.file_manager = FileManager(output_dir)\n        \n        # List available files matching criteria\n        files = await self.list_available_files(file_type, species)\n        \n        if not files:\n            raise AGRAPIError(\n                message=f\"No files found matching criteria: type={file_type}, species={species}\",\n                details={\"file_type\": file_type, \"species\": species}\n            )\n        \n        # Select the first matching file\n        file_info = files[0]\n        logger.info(f\"Selected file for download: {file_info['name']}\")\n        \n        # Download the file\n        file_path = await self.file_manager.download_file(\n            url=file_info['url'],\n            filename=file_info['name'],\n            progress_callback=progress_callback\n        )\n        \n        return file_path\n    \n    def _parse_downloads_page(self, html_content: str) -> List[Dict[str, Any]]:\n        \"\"\"Parse the downloads page HTML to extract file information.\n        \n        Args:\n            html_content: HTML content of the downloads page\n            \n        Returns:\n            List of file information dictionaries\n        \"\"\"\n        soup = BeautifulSoup(html_content, 'html.parser')\n        files = []\n        \n        # Find download sections (typically organized by data type)\n        sections = soup.find_all('div', class_='download-section')\n        \n        for section in sections:\n            # Get section title (data type)\n            section_title = section.find('h3').text.strip() if section.find('h3') else 'Unknown'\n            \n            # Find all download links in this section\n            links = section.find_all('a', href=True)\n            \n            for link in links:\n                href = link['href']\n                \n                # Skip non-download links\n                if not href.startswith('/') and not href.startswith('http'):\n                    continue\n                \n                # Ensure absolute URL\n                if href.startswith('/'):\n                    from ..config import Config\n                    href = f\"{Config.BASE_URL.rstrip('/')}{href}\"\n                \n                # Extract file name from link text or href\n                file_name = link.text.strip()\n                if not file_name:\n                    file_name = href.split('/')[-1]\n                \n                # Determine file type from extension\n                file_type = 'unknown'\n                match = re.search(r'\\.([\\w]+)(?:\\.gz|\\.zip)?$', file_name)\n                if match:\n                    file_type = match.group(1).lower()\n                \n                # Extract species information if available\n                species = 'unknown'\n                species_elem = link.find_parent('div', class_='species')\n                if species_elem and species_elem.find('h4'):\n                    species = species_elem.find('h4').text.strip()\n                \n                # Add file information to results\n                files.append({\n                    'name': file_name,\n                    'url': href,\n                    'type': file_type,\n                    'species': species,\n                    'category': section_title,\n                    'size': link.find_next('span', class_='file-size').text.strip() if link.find_next('span', class_='file-size') else 'Unknown'\n                })\n        \n        return files\n\n# Create singleton instance\nfile_download_tool = FileDownloadTool()\n```\n2. Implement methods to list available files from the downloads page\n3. Add file download functionality with progress tracking\n4. Parse the downloads page HTML to extract file information\n5. Support filtering by file type and species\n6. Handle error cases (file not found, download failures)\n7. Add BeautifulSoup to requirements.txt for HTML parsing",
+        "testStrategy": "Write unit tests with mocked HTML responses to test file listing and parsing. Test with various file types and species filters. Test download functionality with mocked file responses. Verify error handling for missing files and download failures.",
+        "priority": "high",
+        "dependencies": [
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create FileDownloadTool class structure and HTML parsing",
+            "description": "Implement the basic structure of the FileDownloadTool class and the HTML parsing functionality using BeautifulSoup.",
+            "dependencies": [],
+            "details": "Create the file_download.py module with the FileDownloadTool class, including constructor and _parse_downloads_page method. Implement HTML parsing logic to extract file information from the downloads page. Add BeautifulSoup to requirements.txt.",
+            "status": "pending",
+            "testStrategy": "Create unit tests with mock HTML content to verify parsing logic extracts correct file metadata including name, URL, type, species, category, and size."
+          },
+          {
+            "id": 2,
+            "title": "Implement list_available_files method with filtering",
+            "description": "Implement the method to list available files from the downloads page with optional filtering by file type and species.",
+            "dependencies": [],
+            "details": "Implement the list_available_files method that fetches the downloads page HTML, uses the _parse_downloads_page method to extract file information, and applies filters based on file_type and species parameters. Include proper error handling and logging.",
+            "status": "pending",
+            "testStrategy": "Test with mock HTTP responses to verify filtering works correctly for different file types and species. Include tests for edge cases like no matching files."
+          },
+          {
+            "id": 3,
+            "title": "Implement file download functionality with progress tracking",
+            "description": "Implement the download_file method to download files with progress tracking capability.",
+            "dependencies": [],
+            "details": "Implement the download_file method that validates inputs, finds matching files, and downloads the selected file. Integrate with FileManager for actual file download and storage. Implement progress tracking through the optional progress_callback parameter.\n<info added on 2025-06-21T22:50:52.962Z>\nImplement the download_file method that validates inputs, finds matching files, and downloads the selected file. Integrate with FileManager for actual file download and storage. The method should explicitly expose the FileManager's progress tracking functionality by passing through any progress_callback parameter to the underlying FileManager's download methods. This will allow users to monitor download progress for large genomic data files by providing their own callback functions that can update UI elements or log progress information. Ensure the callback interface is well-documented with examples showing how to implement progress tracking for terminal output and GUI applications.\n</info added on 2025-06-21T22:50:52.962Z>",
+            "status": "pending",
+            "testStrategy": "Test download functionality with mock responses, verify correct file paths are returned, and test progress callback is invoked correctly during downloads."
+          },
+          {
+            "id": 4,
+            "title": "Implement error handling and create singleton instance",
+            "description": "Add comprehensive error handling throughout the tool and create the singleton instance for easy import.",
+            "dependencies": [],
+            "details": "Implement error handling for various scenarios: invalid file types, no matching files, network errors, and file system errors. Create and export the singleton instance of FileDownloadTool for easy import in other modules. Ensure all error cases raise appropriate custom exceptions with meaningful messages.",
+            "status": "pending",
+            "testStrategy": "Test error scenarios by mocking failures at different points (HTTP errors, validation failures, file system errors) and verify appropriate exceptions are raised with correct details."
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Implement API Schema Documentation Tool",
+        "description": "Create the API schema documentation tool to provide information about available AGR API endpoints.",
+        "details": "1. Create `src/tools/api_schema.py` with the following implementation:\n```python\nfrom typing import Dict, Any, Optional, List\nimport json\nimport re\n\nfrom bs4 import BeautifulSoup\n\nfrom ..utils.http_client import http_client\nfrom ..utils.logging_config import get_logger\nfrom ..errors import AGRAPIError, AGRNetworkError\n\nlogger = get_logger('api_schema')\n\nclass APISchemaDocumentationTool:\n    \"\"\"Tool for retrieving API schema documentation from the Alliance of Genome Resources.\"\"\"\n    \n    def __init__(self):\n        self.swagger_url = \"/api/swagger-ui\"\n        self._cached_schema = None\n    \n    async def list_api_endpoints(self, category: Optional[str] = None) -> List[Dict[str, Any]]:\n        \"\"\"List available API endpoints with descriptions.\n        \n        Args:\n            category: Optional category filter (e.g., 'gene', 'disease')\n            \n        Returns:\n            List of API endpoints with descriptions\n            \n        Raises:\n            AGRAPIError: If API request fails\n            AGRNetworkError: If network request fails\n        \"\"\"\n        logger.info(f\"Listing API endpoints (category={category})\")\n        \n        try:\n            # Get Swagger UI HTML\n            response = await http_client.get(self.swagger_url)\n            html_content = response.text\n            \n            # Extract API schema from Swagger UI\n            schema = self._extract_schema_from_swagger(html_content)\n            \n            if not schema:\n                # Fallback to cached schema if available\n                if self._cached_schema:\n                    logger.warning(\"Failed to extract schema from Swagger UI, using cached schema\")\n                    schema = self._cached_schema\n                else:\n                    raise AGRAPIError(\n                        message=\"Failed to extract API schema from Swagger UI\",\n                        details={\"url\": self.swagger_url}\n                    )\n            else:\n                # Cache the schema for future use\n                self._cached_schema = schema\n            \n            # Extract endpoints from schema\n            endpoints = self._extract_endpoints_from_schema(schema)\n            \n            # Apply category filter if specified\n            if category:\n                category = category.lower()\n                endpoints = [e for e in endpoints if category in e['path'].lower() or \n                             (e['tags'] and any(category in tag.lower() for tag in e['tags']))]\n            \n            logger.info(f\"Found {len(endpoints)} endpoints matching criteria\")\n            return endpoints\n        \n        except AGRNetworkError:\n            # Fallback to cached schema if available\n            if self._cached_schema and category:\n                logger.warning(\"Network error, using cached schema\")\n                endpoints = self._extract_endpoints_from_schema(self._cached_schema)\n                category = category.lower()\n                endpoints = [e for e in endpoints if category in e['path'].lower() or \n                             (e['tags'] and any(category in tag.lower() for tag in e['tags']))]\n                return endpoints\n            raise\n    \n    async def get_endpoint_details(self, path: str, method: str = 'get') -> Dict[str, Any]:\n        \"\"\"Get detailed information about a specific API endpoint.\n        \n        Args:\n            path: API endpoint path (e.g., '/api/gene/{id}')\n            method: HTTP method (e.g., 'get', 'post')\n            \n        Returns:\n            Detailed endpoint information\n            \n        Raises:\n            AGRAPIError: If endpoint not found or API request fails\n            AGRNetworkError: If network request fails\n        \"\"\"\n        logger.info(f\"Getting details for endpoint: {method.upper()} {path}\")\n        \n        # Normalize path and method\n        if not path.startswith('/'):\n            path = f\"/{path}\"\n        method = method.lower()\n        \n        # Get all endpoints\n        endpoints = await self.list_api_endpoints()\n        \n        # Find matching endpoint\n        for endpoint in endpoints:\n            # Check if path matches (accounting for path parameters)\n            path_match = self._match_path_pattern(endpoint['path'], path)\n            \n            if path_match and endpoint['method'].lower() == method:\n                # Get full schema to extract detailed information\n                schema = self._cached_schema\n                \n                if not schema:\n                    # This shouldn't happen as list_api_endpoints should have cached the schema\n                    raise AGRAPIError(\n                        message=\"API schema not available\",\n                        details={\"path\": path, \"method\": method}\n                    )\n                \n                # Extract detailed information from schema\n                return self._extract_endpoint_details(schema, endpoint['path'], method)\n        \n        # Endpoint not found\n        raise AGRAPIError(\n            message=f\"Endpoint not found: {method.upper()} {path}\",\n            details={\"path\": path, \"method\": method}\n        )\n    \n    def _extract_schema_from_swagger(self, html_content: str) -> Optional[Dict[str, Any]]:\n        \"\"\"Extract OpenAPI schema from Swagger UI HTML.\n        \n        Args:\n            html_content: HTML content of Swagger UI page\n            \n        Returns:\n            OpenAPI schema as dictionary, or None if extraction fails\n        \"\"\"\n        try:\n            soup = BeautifulSoup(html_content, 'html.parser')\n            \n            # Look for script tag containing the schema\n            scripts = soup.find_all('script')\n            for script in scripts:\n                if script.string and 'SwaggerUIBundle' in script.string:\n                    # Extract JSON schema using regex\n                    match = re.search(r'spec:\\s*(\\{.*?\\}),\\s*dom_id', script.string, re.DOTALL)\n                    if match:\n                        schema_json = match.group(1)\n                        # Clean up the JSON string\n                        schema_json = re.sub(r'([{,])\\s*([a-zA-Z0-9_]+):', r'\\1\"\\2\":', schema_json)\n                        # Parse JSON\n                        try:\n                            return json.loads(schema_json)\n                        except json.JSONDecodeError:\n                            logger.error(\"Failed to parse API schema JSON\")\n                            return None\n            \n            return None\n        \n        except Exception as e:\n            logger.error(f\"Error extracting schema from Swagger UI: {str(e)}\")\n            return None\n    \n    def _extract_endpoints_from_schema(self, schema: Dict[str, Any]) -> List[Dict[str, Any]]:\n        \"\"\"Extract endpoints from OpenAPI schema.\n        \n        Args:\n            schema: OpenAPI schema\n            \n        Returns:\n            List of endpoints with basic information\n        \"\"\"\n        endpoints = []\n        \n        # Extract paths from schema\n        paths = schema.get('paths', {})\n        \n        for path, methods in paths.items():\n            for method, details in methods.items():\n                if method in ['get', 'post', 'put', 'delete']:\n                    endpoint = {\n                        'path': path,\n                        'method': method.upper(),\n                        'summary': details.get('summary', ''),\n                        'description': details.get('description', ''),\n                        'tags': details.get('tags', []),\n                        'parameters': [],\n                    }\n                    \n                    # Extract parameters\n                    for param in details.get('parameters', []):\n                        endpoint['parameters'].append({\n                            'name': param.get('name', ''),\n                            'in': param.get('in', ''),\n                            'required': param.get('required', False),\n                            'description': param.get('description', ''),\n                            'type': param.get('type', param.get('schema', {}).get('type', 'string')),\n                        })\n                    \n                    endpoints.append(endpoint)\n        \n        return endpoints\n    \n    def _extract_endpoint_details(self, schema: Dict[str, Any], path: str, method: str) -> Dict[str, Any]:\n        \"\"\"Extract detailed information about a specific endpoint.\n        \n        Args:\n            schema: OpenAPI schema\n            path: Endpoint path\n            method: HTTP method\n            \n        Returns:\n            Detailed endpoint information\n        \"\"\"\n        # Get path details\n        path_details = schema.get('paths', {}).get(path, {})\n        method_details = path_details.get(method, {})\n        \n        if not method_details:\n            raise AGRAPIError(\n                message=f\"Endpoint details not found: {method.upper()} {path}\",\n                details={\"path\": path, \"method\": method}\n            )\n        \n        # Extract response schema\n        responses = method_details.get('responses', {})\n        response_schema = None\n        for status, response in responses.items():\n            if status == '200' or status == 200:\n                schema_ref = response.get('schema', {})\n                if '$ref' in schema_ref:\n                    ref = schema_ref['$ref']\n                    # Extract definition name from reference\n                    def_name = ref.split('/')[-1]\n                    # Get definition from schema\n                    response_schema = schema.get('definitions', {}).get(def_name, {})\n                else:\n                    response_schema = schema_ref\n        \n        # Build detailed endpoint information\n        details = {\n            'path': path,\n            'method': method.upper(),\n            'summary': method_details.get('summary', ''),\n            'description': method_details.get('description', ''),\n            'tags': method_details.get('tags', []),\n            'parameters': [],\n            'responses': {},\n            'example_request': self._build_example_request(path, method, method_details.get('parameters', [])),\n        }\n        \n        # Add parameters\n        for param in method_details.get('parameters', []):\n            param_info = {\n                'name': param.get('name', ''),\n                'in': param.get('in', ''),\n                'required': param.get('required', False),\n                'description': param.get('description', ''),\n                'type': param.get('type', param.get('schema', {}).get('type', 'string')),\n            }\n            \n            # Add enum values if available\n            if 'enum' in param:\n                param_info['enum'] = param['enum']\n            \n            details['parameters'].append(param_info)\n        \n        # Add responses\n        for status, response in responses.items():\n            details['responses'][status] = {\n                'description': response.get('description', ''),\n                'schema': response.get('schema', {}),\n            }\n        \n        # Add response schema if available\n        if response_schema:\n            details['response_schema'] = response_schema\n        \n        return details\n    \n    def _match_path_pattern(self, pattern: str, path: str) -> bool:\n        \"\"\"Match a path against a pattern with path parameters.\n        \n        Args:\n            pattern: Path pattern (e.g., '/api/gene/{id}')\n            path: Actual path (e.g., '/api/gene/MGI:123456')\n            \n        Returns:\n            True if path matches pattern, False otherwise\n        \"\"\"\n        # Convert pattern to regex\n        regex_pattern = pattern.replace('{', '(?P<').replace('}', '>[^/]+)')\n        regex_pattern = f'^{regex_pattern}$'\n        \n        return bool(re.match(regex_pattern, path))\n    \n    def _build_example_request(self, path: str, method: str, parameters: List[Dict[str, Any]]) -> Dict[str, Any]:\n        \"\"\"Build an example request for the endpoint.\n        \n        Args:\n            path: Endpoint path\n            method: HTTP method\n            parameters: List of parameters\n            \n        Returns:\n            Example request with curl command and Python code\n        \"\"\"\n        # Replace path parameters with example values\n        example_path = path\n        query_params = []\n        header_params = []\n        body_params = {}\n        \n        for param in parameters:\n            name = param.get('name', '')\n            param_in = param.get('in', '')\n            param_type = param.get('type', 'string')\n            \n            # Generate example value based on type\n            example_value = self._generate_example_value(name, param_type, param.get('enum'))\n            \n            if param_in == 'path':\n                # Replace path parameter\n                example_path = example_path.replace(f'{{{name}}}', str(example_value))\n            elif param_in == 'query':\n                # Add query parameter\n                query_params.append(f\"{name}={example_value}\")\n            elif param_in == 'header':\n                # Add header parameter\n                header_params.append(f\"{name}: {example_value}\")\n            elif param_in == 'body':\n                # Add body parameter\n                body_params[name] = example_value\n        \n        # Build example URL\n        from ..config import Config\n        base_url = Config.BASE_URL.rstrip('/')\n        example_url = f\"{base_url}{example_path}\"\n        if query_params:\n            example_url += f\"?{'&'.join(query_params)}\"\n        \n        # Build curl command\n        curl_cmd = f\"curl -X {method.upper()} \\\\\n  \\\"{example_url}\\\"\"\n        \n        for header in header_params:\n            curl_cmd += f\" \\\\\n  -H \\\"{header}\\\"\"\n        \n        if body_params:\n            curl_cmd += f\" \\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\n  -d '{json.dumps(body_params)}'\"\n        \n        # Build Python code\n        python_code = f\"\"\"import httpx\n\nurl = \"{example_url}\"\n\"\"\"\n        \n        if header_params:\n            headers_str = ', '.join([f'\"{h.split(': ')[0]}\": \"{h.split(': ')[1]}\"' for h in header_params])\n            python_code += f\"headers = {{{headers_str}}}\n\"\n        else:\n            python_code += \"headers = {}\n\"\n        \n        if body_params:\n            python_code += f\"payload = {json.dumps(body_params, indent=2)}\n\"\n        \n        if method.lower() == 'get':\n            python_code += \"\\nresponse = httpx.get(url, headers=headers)\"\n        elif method.lower() == 'post':\n            if body_params:\n                python_code += \"\\nresponse = httpx.post(url, headers=headers, json=payload)\"\n            else:\n                python_code += \"\\nresponse = httpx.post(url, headers=headers)\"\n        elif method.lower() == 'put':\n            if body_params:\n                python_code += \"\\nresponse = httpx.put(url, headers=headers, json=payload)\"\n            else:\n                python_code += \"\\nresponse = httpx.put(url, headers=headers)\"\n        elif method.lower() == 'delete':\n            python_code += \"\\nresponse = httpx.delete(url, headers=headers)\"\n        \n        python_code += \"\\n\\nprint(response.status_code)\\nprint(response.json())\"\n        \n        return {\n            'url': example_url,\n            'curl': curl_cmd,\n            'python': python_code,\n        }\n    \n    def _generate_example_value(self, name: str, param_type: str, enum: Optional[List[Any]] = None) -> Any:\n        \"\"\"Generate an example value for a parameter.\n        \n        Args:\n            name: Parameter name\n            param_type: Parameter type\n            enum: Optional list of enum values\n            \n        Returns:\n            Example value\n        \"\"\"\n        # Use enum value if available\n        if enum and len(enum) > 0:\n            return enum[0]\n        \n        # Generate based on parameter name and type\n        if 'id' in name.lower():\n            if 'gene' in name.lower():\n                return \"MGI:97490\"\n            elif 'disease' in name.lower():\n                return \"DOID:14330\"\n            elif 'allele' in name.lower():\n                return \"MGI:5823345\"\n            else:\n                return \"EXAMPLE_ID\"\n        \n        if param_type == 'string':\n            if 'name' in name.lower():\n                return \"example\"\n            elif 'species' in name.lower():\n                return \"mouse\"\n            elif 'type' in name.lower():\n                return \"gene\"\n            else:\n                return \"example_string\"\n        elif param_type == 'integer' or param_type == 'number':\n            return 123\n        elif param_type == 'boolean':\n            return True\n        elif param_type == 'array':\n            return [\"example\"]\n        elif param_type == 'object':\n            return {\"key\": \"value\"}\n        else:\n            return \"example\"\n\n# Create singleton instance\napi_schema_tool = APISchemaDocumentationTool()\n```\n2. Implement methods to list available API endpoints\n3. Add functionality to extract detailed information about specific endpoints\n4. Parse the Swagger UI HTML to extract the OpenAPI schema\n5. Generate example requests for endpoints\n6. Implement caching to handle network failures\n7. Add BeautifulSoup to requirements.txt for HTML parsing",
+        "testStrategy": "Write unit tests with mocked Swagger UI responses to test schema extraction. Test endpoint listing with various category filters. Test endpoint detail retrieval with valid and invalid paths. Verify example request generation for different parameter types.",
+        "priority": "medium",
+        "dependencies": [
+          3,
+          4,
+          5,
+          6
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement APISchemaDocumentationTool class structure and schema extraction",
+            "description": "Create the base class structure and implement the schema extraction functionality from Swagger UI HTML using BeautifulSoup.",
+            "dependencies": [],
+            "details": "Create src/tools/api_schema.py with the APISchemaDocumentationTool class. Implement the __init__ method, _extract_schema_from_swagger method to parse HTML and extract OpenAPI schema using BeautifulSoup. Add BeautifulSoup to requirements.txt. Set up basic logging and error handling structure.",
+            "status": "pending",
+            "testStrategy": "Write unit tests for schema extraction with sample HTML content. Mock the HTTP response for testing."
+          },
+          {
+            "id": 2,
+            "title": "Implement endpoint listing and filtering functionality",
+            "description": "Implement the list_api_endpoints method to extract and filter API endpoints from the schema.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement _extract_endpoints_from_schema method to parse the OpenAPI schema and extract endpoint information. Complete the list_api_endpoints method with category filtering. Implement caching mechanism to store schema for handling network failures.",
+            "status": "pending",
+            "testStrategy": "Test endpoint extraction with sample schema data. Test category filtering with different inputs. Test fallback to cached schema when network fails."
+          },
+          {
+            "id": 3,
+            "title": "Implement detailed endpoint information retrieval",
+            "description": "Implement the get_endpoint_details method to provide detailed information about specific API endpoints.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement _extract_endpoint_details method to extract comprehensive information about a specific endpoint. Implement _match_path_pattern method to match endpoint paths with parameters. Add error handling for endpoint not found scenarios.",
+            "status": "pending",
+            "testStrategy": "Test endpoint detail retrieval with various path patterns. Test path matching with and without parameters. Test error cases when endpoints aren't found."
+          },
+          {
+            "id": 4,
+            "title": "Implement example request generation",
+            "description": "Add functionality to generate example requests for API endpoints in curl and Python formats.",
+            "dependencies": [
+              3
+            ],
+            "details": "Implement _build_example_request method to generate example requests. Implement _generate_example_value method to create appropriate example values based on parameter types and names. Format the examples as curl commands and Python code snippets. Create the singleton instance api_schema_tool at the module level.",
+            "status": "pending",
+            "testStrategy": "Test example generation with different endpoint types. Verify curl and Python examples are valid and properly formatted. Test with various parameter types and combinations."
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Implement MCP Server and Final Project Archival",
+        "description": "Create the main MCP server implementation and complete the final project archival process.",
+        "details": "1. Create `src/server.py` with the following implementation:\n```python\nfrom typing import Dict, Any, Optional, List, Callable\nimport os\nimport shutil\n\nfrom mcp_sdk import MCP, Tool, ToolParameter, ToolResponse\n\nfrom .tools.gene_query import gene_query_tool\nfrom .tools.file_download import file_download_tool\nfrom .tools.api_schema import api_schema_tool\nfrom .utils.logging_config import setup_logging, get_logger\nfrom .errors import AGRBaseError, AGRAPIError, AGRNetworkError, AGRValidationError, AGRFileSystemError\n\n# Set up logging\nlogger = setup_logging()\nserver_logger = get_logger('server')\n\nclass AGRMCPServer:\n    \"\"\"Model Context Protocol server for Alliance of Genome Resources.\"\"\"\n    \n    def __init__(self):\n        self.mcp = MCP()\n        self._register_tools()\n        server_logger.info(\"AGR MCP Server initialized\")\n    \n    def _register_tools(self):\n        \"\"\"Register all tools with the MCP server.\"\"\"\n        # Register gene query tool\n        self.mcp.register_tool(\n            Tool(\n                name=\"query_gene\",\n                description=\"Query gene information from the Alliance of Genome Resources\",\n                parameters=[\n                    ToolParameter(\n                        name=\"gene_id\",\n                        description=\"Gene ID to query (e.g., MGI:97490, FB:FBgn0000001)\",\n                        type=\"string\",\n                        required=True\n                    ),\n                    ToolParameter(\n                        name=\"include_disease\",\n                        description=\"Whether to include disease associations\",\n                        type=\"boolean\",\n                        required=False,\n                        default=False\n                    ),\n                    ToolParameter(\n                        name=\"include_expression\",\n                        description=\"Whether to include expression data\",\n                        type=\"boolean\",\n                        required=False,\n                        default=False\n                    )\n                ],\n                handler=self._handle_query_gene\n            )\n        )\n        \n        # Register file download tool\n        self.mcp.register_tool(\n            Tool(\n                name=\"download_file\",\n                description=\"Download a file from the Alliance of Genome Resources\",\n                parameters=[\n                    ToolParameter(\n                        name=\"file_type\",\n                        description=\"Type of file to download (e.g., gff3, tab)\",\n                        type=\"string\",\n                        required=True\n                    ),\n                    ToolParameter(\n                        name=\"species\",\n                        description=\"Species filter (e.g., mouse, rat, zebrafish)\",\n                        type=\"string\",\n                        required=False\n                    ),\n                    ToolParameter(\n                        name=\"output_dir\",\n                        description=\"Directory to save the downloaded file\",\n                        type=\"string\",\n                        required=False\n                    )\n                ],\n                handler=self._handle_download_file\n            )\n        )\n        \n        # Register list available files tool\n        self.mcp.register_tool(\n            Tool(\n                name=\"list_available_files\",\n                description=\"List available files from the Alliance of Genome Resources downloads page\",\n                parameters=[\n                    ToolParameter(\n                        name=\"file_type\",\n                        description=\"Filter by file type (e.g., gff3, tab)\",\n                        type=\"string\",\n                        required=False\n                    ),\n                    ToolParameter(\n                        name=\"species\",\n                        description=\"Filter by species (e.g., mouse, rat, zebrafish)\",\n                        type=\"string\",\n                        required=False\n                    )\n                ],\n                handler=self._handle_list_available_files\n            )\n        )\n        \n        # Register API schema documentation tool\n        self.mcp.register_tool(\n            Tool(\n                name=\"list_api_endpoints\",\n                description=\"List available API endpoints from the Alliance of Genome Resources\",\n                parameters=[\n                    ToolParameter(\n                        name=\"category\",\n                        description=\"Filter by category (e.g., gene, disease)\",\n                        type=\"string\",\n                        required=False\n                    )\n                ],\n                handler=self._handle_list_api_endpoints\n            )\n        )\n        \n        # Register endpoint details tool\n        self.mcp.register_tool(\n            Tool(\n                name=\"get_endpoint_details\",\n                description=\"Get detailed information about a specific API endpoint\",\n                parameters=[\n                    ToolParameter(\n                        name=\"path\",\n                        description=\"API endpoint path (e.g., /api/gene/{id})\",\n                        type=\"string\",\n                        required=True\n                    ),\n                    ToolParameter(\n                        name=\"method\",\n                        description=\"HTTP method (e.g., get, post)\",\n                        type=\"string\",\n                        required=False,\n                        default=\"get\"\n                    )\n                ],\n                handler=self._handle_get_endpoint_details\n            )\n        )\n        \n        server_logger.info(\"All tools registered\")\n    \n    async def _handle_query_gene(self, params: Dict[str, Any]) -> ToolResponse:\n        \"\"\"Handle gene query tool requests.\"\"\"\n        try:\n            gene_id = params.get('gene_id')\n            include_disease = params.get('include_disease', False)\n            include_expression = params.get('include_expression', False)\n            \n            server_logger.info(f\"Handling query_gene request for {gene_id}\")\n            \n            result = await gene_query_tool.query_gene(\n                gene_id=gene_id,\n                include_disease=include_disease,\n                include_expression=include_expression\n            )\n            \n            return ToolResponse(result=result)\n        \n        except AGRBaseError as e:\n            server_logger.error(f\"Error in query_gene: {str(e)}\")\n            return ToolResponse(error={\n                'message': e.message,\n                'status_code': e.status_code,\n                'details': e.details\n            })\n        \n        except Exception as e:\n            server_logger.error(f\"Unexpected error in query_gene: {str(e)}\")\n            return ToolResponse(error={\n                'message': f\"Unexpected error: {str(e)}\",\n                'details': {'error': str(e)}\n            })\n    \n    async def _handle_download_file(self, params: Dict[str, Any]) -> ToolResponse:\n        \"\"\"Handle file download tool requests.\"\"\"\n        try:\n            file_type = params.get('file_type')\n            species = params.get('species')\n            output_dir = params.get('output_dir')\n            \n            server_logger.info(f\"Handling download_file request for {file_type} (species={species})\")\n            \n            file_path = await file_download_tool.download_file(\n                file_type=file_type,\n                species=species,\n                output_dir=output_dir\n            )\n            \n            return ToolResponse(result={\n                'file_path': file_path,\n                'success': True,\n                'message': f\"File downloaded successfully to {file_path}\"\n            })\n        \n        except AGRBaseError as e:\n            server_logger.error(f\"Error in download_file: {str(e)}\")\n            return ToolResponse(error={\n                'message': e.message,\n                'status_code': e.status_code,\n                'details': e.details\n            })\n        \n        except Exception as e:\n            server_logger.error(f\"Unexpected error in download_file: {str(e)}\")\n            return ToolResponse(error={\n                'message': f\"Unexpected error: {str(e)}\",\n                'details': {'error': str(e)}\n            })\n    \n    async def _handle_list_available_files(self, params: Dict[str, Any]) -> ToolResponse:\n        \"\"\"Handle list available files tool requests.\"\"\"\n        try:\n            file_type = params.get('file_type')\n            species = params.get('species')\n            \n            server_logger.info(f\"Handling list_available_files request (type={file_type}, species={species})\")\n            \n            files = await file_download_tool.list_available_files(\n                file_type=file_type,\n                species=species\n            )\n            \n            return ToolResponse(result={\n                'files': files,\n                'count': len(files)\n            })\n        \n        except AGRBaseError as e:\n            server_logger.error(f\"Error in list_available_files: {str(e)}\")\n            return ToolResponse(error={\n                'message': e.message,\n                'status_code': e.status_code,\n                'details': e.details\n            })\n        \n        except Exception as e:\n            server_logger.error(f\"Unexpected error in list_available_files: {str(e)}\")\n            return ToolResponse(error={\n                'message': f\"Unexpected error: {str(e)}\",\n                'details': {'error': str(e)}\n            })\n    \n    async def _handle_list_api_endpoints(self, params: Dict[str, Any]) -> ToolResponse:\n        \"\"\"Handle list API endpoints tool requests.\"\"\"\n        try:\n            category = params.get('category')\n            \n            server_logger.info(f\"Handling list_api_endpoints request (category={category})\")\n            \n            endpoints = await api_schema_tool.list_api_endpoints(category=category)\n            \n            return ToolResponse(result={\n                'endpoints': endpoints,\n                'count': len(endpoints)\n            })\n        \n        except AGRBaseError as e:\n            server_logger.error(f\"Error in list_api_endpoints: {str(e)}\")\n            return ToolResponse(error={\n                'message': e.message,\n                'status_code': e.status_code,\n                'details': e.details\n            })\n        \n        except Exception as e:\n            server_logger.error(f\"Unexpected error in list_api_endpoints: {str(e)}\")\n            return ToolResponse(error={\n                'message': f\"Unexpected error: {str(e)}\",\n                'details': {'error': str(e)}\n            })\n    \n    async def _handle_get_endpoint_details(self, params: Dict[str, Any]) -> ToolResponse:\n        \"\"\"Handle get endpoint details tool requests.\"\"\"\n        try:\n            path = params.get('path')\n            method = params.get('method', 'get')\n            \n            server_logger.info(f\"Handling get_endpoint_details request for {method.upper()} {path}\")\n            \n            details = await api_schema_tool.get_endpoint_details(path=path, method=method)\n            \n            return ToolResponse(result=details)\n        \n        except AGRBaseError as e:\n            server_logger.error(f\"Error in get_endpoint_details: {str(e)}\")\n            return ToolResponse(error={\n                'message': e.message,\n                'status_code': e.status_code,\n                'details': e.details\n            })\n        \n        except Exception as e:\n            server_logger.error(f\"Unexpected error in get_endpoint_details: {str(e)}\")\n            return ToolResponse(error={\n                'message': f\"Unexpected error: {str(e)}\",\n                'details': {'error': str(e)}\n            })\n    \n    def start(self):\n        \"\"\"Start the MCP server.\"\"\"\n        server_logger.info(\"Starting AGR MCP Server\")\n        self.mcp.start()\n    \n    def stop(self):\n        \"\"\"Stop the MCP server.\"\"\"\n        server_logger.info(\"Stopping AGR MCP Server\")\n        self.mcp.stop()\n\n# Create singleton instance\nagr_mcp_server = AGRMCPServer()\n\ndef start_server():\n    \"\"\"Start the AGR MCP server.\"\"\"\n    agr_mcp_server.start()\n\ndef stop_server():\n    \"\"\"Stop the AGR MCP server.\"\"\"\n    agr_mcp_server.stop()\n\nif __name__ == \"__main__\":\n    start_server()\n```\n\n2. Create a main entry point in `src/__init__.py`:\n```python\nfrom .server import start_server, stop_server, agr_mcp_server\n\n__all__ = ['start_server', 'stop_server', 'agr_mcp_server']\n```\n\n3. Complete the final project archival process:\n   - Create `taskmaster_archive/` subdirectory in analysis/alliance/agr_mcp/\n   - Copy all Task Master configuration files\n   - Copy the PRD to the archive directory\n   - Ensure all code is in the proper src/ structure\n   - Update README.md with final usage instructions\n   - Create feature branch: `feature/agr-mcp-initial-release`\n   - Commit all changes with descriptive messages\n   - Push to remote repository\n   - Run full test suite\n   - Verify MCP server starts correctly\n   - Test each tool with real AGR data",
+        "testStrategy": "Write integration tests to verify that the MCP server starts correctly and all tools are registered. Test each tool handler with valid and invalid inputs. Verify error handling for all tools. Test the complete workflow from server startup to tool execution.",
+        "priority": "high",
+        "dependencies": [
+          9,
+          10,
+          11
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement MCP Server Core Functionality",
+            "description": "Create the server.py file with the AGRMCPServer class implementation and register all tools with appropriate handlers.",
+            "dependencies": [],
+            "details": "1. Create src/server.py with the AGRMCPServer class\n2. Implement the constructor and _register_tools method\n3. Implement all handler methods (_handle_query_gene, _handle_download_file, etc.)\n4. Create the singleton instance and start/stop functions\n5. Ensure proper error handling and logging throughout",
+            "status": "pending",
+            "testStrategy": "Write unit tests to verify server initialization, tool registration, and basic handler functionality with mocked dependencies."
+          },
+          {
+            "id": 2,
+            "title": "Create Main Entry Point and Package Structure",
+            "description": "Set up the package structure and create the main entry point in __init__.py to expose the server functionality.",
+            "dependencies": [],
+            "details": "1. Create src/__init__.py to expose start_server, stop_server, and agr_mcp_server\n2. Ensure all imports are correctly set up\n3. Verify the package structure follows best practices\n4. Check that all dependencies are properly imported\n5. Ensure the server can be started from the entry point",
+            "status": "pending",
+            "testStrategy": "Test importing the package and starting/stopping the server from the entry point. Verify that all expected functions are exposed."
+          },
+          {
+            "id": 3,
+            "title": "Set Up Project Archive Structure",
+            "description": "Create the archive directory structure and copy all necessary configuration files and documentation.",
+            "dependencies": [],
+            "details": "1. Create taskmaster_archive/ subdirectory in analysis/alliance/agr_mcp/\n2. Copy all Task Master configuration files to the archive\n3. Copy the PRD to the archive directory\n4. Ensure all code is properly organized in the src/ structure\n5. Update README.md with final usage instructions and project overview",
+            "status": "pending",
+            "testStrategy": "Verify all files are correctly copied and the directory structure matches requirements. Check that README.md contains accurate and complete information."
+          },
+          {
+            "id": 4,
+            "title": "Finalize Project and Create Release Branch",
+            "description": "Complete the final project steps including creating a feature branch, committing changes, and running tests.",
+            "dependencies": [],
+            "details": "1. Create feature branch: feature/agr-mcp-initial-release\n2. Commit all changes with descriptive messages\n3. Push to remote repository\n4. Run full test suite to verify functionality\n5. Test each tool with real AGR data\n6. Verify MCP server starts and stops correctly\n7. Document any known issues or limitations",
+            "status": "pending",
+            "testStrategy": "Run integration tests for each tool with real AGR data. Verify the server starts correctly and all tools function as expected. Test error handling by providing invalid inputs."
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "created": "2025-06-21T22:40:58.616Z",
+      "updated": "2025-06-21T22:40:58.616Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

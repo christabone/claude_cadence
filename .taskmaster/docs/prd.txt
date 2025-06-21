@@ -1,0 +1,206 @@
+# Project Requirements Document (PRD)
+
+## Project Overview
+**Project Title**: Alliance of Genome Resources MCP Server
+
+**Objective**: Create a Model Context Protocol (MCP) server that provides Claude Code and other AI assistants with streamlined access to Alliance of Genome Resources (AGR) data through their REST API and downloads infrastructure.
+
+**Background**: The Alliance of Genome Resources is a consortium of model organism databases (mouse, rat, yeast, nematode, zebrafish, frog, fruit fly) that provides unified access to genomic data. Currently, accessing AGR data requires manual API calls or file downloads. An MCP server would enable AI assistants to programmatically query gene information, retrieve disease associations, and download datasets directly within their workflows.
+
+## Requirements
+
+### Functional Requirements
+
+1. **Gene Data Query Tool**: Implement a tool that interfaces with the AGR REST API to query gene information
+   - Support for gene-summary endpoint (https://www.alliancegenome.org/api/gene/{gene_id})
+   - Accept gene IDs from multiple model organisms (e.g., MGI:123456, FB:FBgn0000001)
+   - Return structured gene information including symbol, name, synonyms, and basic annotations
+
+2. **File Download Tool**: Implement a tool to download files from the AGR downloads page
+   - Parse and list available files from https://www.alliancegenome.org/downloads
+   - Support downloading specific file types (tab-delimited, GFF3, etc.)
+   - Handle large file downloads with progress tracking
+   - Return file paths for downloaded content
+   - Note: Downloads page structure is maintained by the Alliance team, reducing parsing complexity
+
+3. **API Schema Documentation Tool**: Provide access to API documentation
+   - Retrieve available endpoints from Swagger UI
+   - Return endpoint descriptions and parameter requirements
+   - Help users understand available data types
+
+### Technical Requirements
+
+- **Language**: Python 3.8+
+- **MCP SDK**: Use the official MCP Python SDK (mcp-sdk)
+- **HTTP Library**: Use httpx for async HTTP requests
+- **File Handling**: Implement proper temporary file management for downloads
+- **Error Handling**: Comprehensive error handling with specific error types:
+  - Network errors (connection timeouts, DNS failures)
+  - API errors (404 for invalid gene IDs, 500 server errors)
+  - File system errors (disk space, permissions)
+  - Graceful degradation with informative error messages
+- **Configuration**: Support for base URL configuration (default: https://www.alliancegenome.org)
+- **Rate Limiting**: Respect AGR API rate limits (implement exponential backoff)
+- **Caching**: Optional caching for frequently accessed gene data
+
+### Security & Monitoring Requirements (Minimal for MVP)
+
+- **Security**:
+  - Validate all user inputs (gene IDs, file paths)
+  - Use temporary directories with proper permissions for downloads
+  - No credential storage (AGR API is public)
+  - Sanitize file names to prevent path traversal attacks
+- **Logging**:
+  - Use Python's standard logging module
+  - Log levels: ERROR for failures, INFO for operations, DEBUG for troubleshooting
+  - Include request IDs for tracing
+  - Rotate logs to prevent disk space issues
+- **Monitoring**:
+  - Basic health check endpoint for MCP server status
+  - Log API response times for performance tracking
+  - Track error rates by error type
+  - No external monitoring services for MVP
+
+### Success Criteria
+
+- Successfully query gene information for at least 5 different model organism gene IDs
+- Download and verify at least 3 different file types from the downloads page
+- Handle error cases gracefully (invalid gene IDs, network failures, etc.)
+- Pass all unit tests with >90% code coverage
+- Documentation includes clear examples for each tool
+
+## Implementation Guidelines
+
+### Documentation Structure
+- **Organization**: alliance
+- Create analysis directory: `analysis/alliance/agr_mcp/`
+- Generate ONE markdown file per Task Master task
+- Include README.md with project overview and MCP server usage instructions
+- Document all API endpoints used and their expected responses
+
+### Task Management
+**FIRST TASK - Documentation Setup (MANDATORY):**
+- Create analysis directory: `analysis/alliance/agr_mcp/`
+- Initialize project structure with README.md
+- Document project objectives and architecture decisions
+
+**Core Implementation Tasks:**
+- Research and document AGR API structure and authentication requirements
+- Design MCP server architecture with tool definitions
+- Implement gene query tool with proper error handling
+- Implement file download tool with progress tracking
+- Create comprehensive test suite
+- Write user documentation with examples
+
+### Architecture Design
+
+**MCP Server Structure:**
+```
+agr_mcp/
+├── src/
+│   ├── __init__.py
+│   ├── server.py          # Main MCP server implementation
+│   ├── tools/
+│   │   ├── __init__.py
+│   │   ├── gene_query.py  # Gene API query tool
+│   │   ├── file_download.py # Downloads tool
+│   │   └── api_schema.py  # API documentation tool
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── http_client.py # Shared HTTP client with retry logic
+│   │   ├── file_manager.py # Download file management
+│   │   ├── validators.py   # Input validation utilities
+│   │   └── logging_config.py # Centralized logging setup
+│   ├── errors.py          # Custom exception classes
+│   └── config.py          # Configuration settings
+├── tests/
+│   ├── test_gene_query.py
+│   ├── test_file_download.py
+│   ├── test_server.py
+│   └── test_error_handling.py
+├── logs/                  # Log file directory (gitignored)
+├── pyproject.toml
+├── README.md
+└── requirements.txt
+```
+
+**Tool Specifications:**
+
+1. **query_gene**
+   - Input: gene_id (string), include_disease (boolean), include_expression (boolean)
+   - Output: Structured gene data object
+   - Endpoint: /api/gene/{gene_id}
+   - Error handling: Return clear error for invalid gene IDs, network failures
+
+2. **download_file**
+   - Input: file_type (string), species (string optional), output_dir (string optional)
+   - Output: File path of downloaded file
+   - Source: https://www.alliancegenome.org/downloads
+   - Error handling: Validate file types, handle partial downloads, disk space checks
+
+3. **list_api_endpoints**
+   - Input: category (string optional)
+   - Output: List of available API endpoints with descriptions
+   - Error handling: Fallback to cached schema if Swagger UI unavailable
+
+**Error Handling Strategy:**
+- Define custom exceptions: `AGRAPIError`, `AGRNetworkError`, `AGRValidationError`
+- All tools return structured error responses with error codes and user-friendly messages
+- Network retries with exponential backoff (max 3 attempts)
+- Log all errors with context for debugging
+
+### Quality Standards
+- Follow PEP 8 Python style guidelines
+- Type hints for all functions
+- Docstrings for all public methods
+- Async/await for all I/O operations
+- Comprehensive logging for debugging
+- Unit tests for all tools
+- Integration tests for API interactions
+
+### Final Project Archival Process (REQUIRED COMPLETION STEPS)
+**Task Master MUST set this as the FINAL TASK in the project with highest priority**
+
+1. **Archive Task Master files**:
+   - Create `taskmaster_archive/` subdirectory in analysis/alliance/agr_mcp/
+   - Copy all Task Master configuration files
+   - Copy this PRD to archive directory
+
+2. **Organize project files**:
+   - Ensure all code is in proper src/ structure
+   - Verify tests are passing
+   - Update README with final usage instructions
+
+3. **Git workflow**:
+   - Create feature branch: `feature/agr-mcp-initial-release`
+   - Commit all changes with descriptive messages
+   - Push to remote repository
+
+4. **Verification**:
+   - Run full test suite
+   - Verify MCP server starts correctly
+   - Test each tool with real AGR data
+
+## Notes
+- AGR APIs are public and don't require authentication for GET requests
+- Start with read-only operations for the initial release
+- Consider adding mutation operations (if available) in future releases
+- Monitor AGR API changes and update accordingly
+- Downloads may be large; implement proper streaming and progress indicators
+- Since the Alliance team controls the downloads page, coordinate any structural changes
+- Log files should be rotated daily or when they reach 100MB
+
+## Additional Considerations
+- Future enhancements could include:
+  - Support for bulk gene queries
+  - Integration with AGR's InterMine instance
+  - Caching layer for frequently accessed data
+  - Support for GraphQL endpoints if AGR implements them
+  - Advanced monitoring with metrics export
+  - OAuth2 support if AGR adds authenticated endpoints
+- Consider rate limiting to be a good API citizen (start with 10 requests/second)
+- Document any AGR-specific data formats or conventions
+- For production deployment, consider containerization with Docker
+
+---
+*This PRD establishes the foundation for an MCP server that bridges AI assistants with the Alliance of Genome Resources data ecosystem.*
