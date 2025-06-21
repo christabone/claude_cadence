@@ -17,7 +17,7 @@ execution:
 # Agent configuration
 agent:
   # Model to use for the main agent execution
-  model: "claude-3-5-sonnet-20241022"
+  model: "claude-3-5-sonnet-20241022"  # Can be updated to "claude-sonnet-4-20250514" if available
   # Tools available to the agent
   # Comment out any tools you want to disable
   tools:
@@ -38,8 +38,8 @@ agent:
 # Supervisor configuration
 supervisor:
   # Model to use for checkpoint analysis
-  # Options: "heuristic" (built-in), "claude-3-opus-latest", "claude-3-5-sonnet-20241022"
-  model: "heuristic"
+  # Options: "heuristic" (built-in), "claude-3-opus-latest", "claude-3-5-sonnet-20241022", "claude-opus-4-20250514"
+  model: "heuristic"  # Can be updated to "claude-opus-4-20250514" for AI supervision
   # Confidence threshold for intervention (0.0-1.0)
   intervention_threshold: 0.7
   # Whether to show detailed analysis
