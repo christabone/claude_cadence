@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 
+# Constants for system-wide strings
+COMPLETION_PHRASE = "ALL TASKS COMPLETE"
+SCRATCHPAD_DIR = ".cadence/scratchpad"
+
 
 @dataclass
 class ExecutionConfig:

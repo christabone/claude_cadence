@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
+import uuid
 from .prompts import TodoPromptManager
 from .task_manager import TaskManager, Task
 from .config import ConfigLoader, CadenceConfig
@@ -80,7 +81,7 @@ class TaskSupervisor:
         self.execution_history = []
         
     def execute_with_todos(self, todos: List[str], task_list: Optional[List[Dict]] = None, 
-                          continuation_context: Optional[str] = None) -> ExecutionResult:
+                          continuation_context: Optional[str] = None, session_id: Optional[str] = None) -> ExecutionResult:
         """
         Execute agent with a list of TODOs
         
@@ -96,9 +97,21 @@ class TaskSupervisor:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_file = self.output_dir / f"execution_{timestamp}.log"
         
+        # Generate session ID if not provided
+        if session_id is None:
+            session_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
+        
+        # Extract task numbers from task_list if available
+        task_numbers = ""
+        if task_list:
+            task_ids = [str(task.get('id', '?')) for task in task_list if not task.get('status') == 'done']
+            task_numbers = ", ".join(task_ids)
+        
         # Initialize prompt manager if not already done
         if not hasattr(self, 'prompt_manager'):
             self.prompt_manager = TodoPromptManager(todos, self.max_turns)
+            self.prompt_manager.session_id = session_id
+            self.prompt_manager.task_numbers = task_numbers
         
         # Build prompt with TODOs
         prompt = self._build_todo_prompt(todos, continuation_context)
@@ -281,7 +294,9 @@ class TaskSupervisor:
             "log_file": str(log_file),
             "timestamp": timestamp,
             "model": self.model,
-            "todos_count": len(todos)
+            "todos_count": len(todos),
+            "session_id": session_id,
+            "scratchpad_path": f".cadence/scratchpad/session_{session_id}.md"
         }
         
         return ExecutionResult(
@@ -299,9 +314,15 @@ class TaskSupervisor:
         # Use prompt manager if available
         if hasattr(self, 'prompt_manager'):
             if continuation_context:
+                # Create supervisor analysis dict
+                supervisor_analysis = {
+                    'session_id': self.prompt_manager.session_id,
+                    'previous_session_id': getattr(self, 'previous_session_id', 'unknown')
+                }
                 return self.prompt_manager.get_continuation_prompt(
                     analysis_guidance="Continue where you left off. Focus on completing the remaining TODOs.",
-                    continuation_context=continuation_context
+                    continuation_context=continuation_context,
+                    supervisor_analysis=supervisor_analysis
                 )
             else:
                 return self.prompt_manager.get_initial_prompt()
@@ -399,10 +420,14 @@ IMPORTANT:
             # Initialize prompt manager with todos
             self.prompt_manager = TodoPromptManager(todos, self.max_turns)
             
+            # Generate session ID for this execution
+            session_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_taskmaster"
+            
             # Execute with TODOs
             result = self.execute_with_todos(
                 todos=todos,
-                task_list=[t.__dict__ for t in task_manager.tasks]
+                task_list=[t.__dict__ for t in task_manager.tasks],
+                session_id=session_id
             )
             
             # Save execution history

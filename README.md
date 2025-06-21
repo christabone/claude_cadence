@@ -16,8 +16,10 @@ Claude Cadence provides a framework for managing Claude Code agents through task
 - **Task Master Integration**: Supervisor manages tasks using Task Master
 - **Natural Completion**: Agents work until tasks are done, not until turns run out
 - **Safety Limits**: Maximum turn limits prevent runaway execution
-- **Progress Tracking**: Monitor task completion and execution status
+- **Progress Tracking**: Monitor task completion and execution status via scratchpad files
 - **Flexible Configuration**: YAML-based configuration for all settings
+- **Enhanced Prompts**: Comprehensive agent context with safety-first design
+- **Continuation Support**: Dynamic prompts for resumed execution with full context preservation
 
 ## Installation
 
@@ -59,6 +61,15 @@ Claude Cadence implements a supervisor-agent pattern where:
 - **No arbitrary checkpoints** - only task completion or safety limits stop execution
 
 This ensures agents focus on completing work rather than managing execution windows.
+
+### Prompt System
+
+The prompt system prioritizes safety and reliability:
+
+- **Full Context Preservation**: Every continuation includes complete agent context
+- **Scratchpad Tracking**: Agents maintain progress in `.cadence/scratchpad/` files
+- **Dynamic Adaptation**: Prompts adjust based on completion status and issues
+- **Safety-First Design**: Explicit warnings about `--dangerously-skip-permissions`
 
 ## Configuration
 
