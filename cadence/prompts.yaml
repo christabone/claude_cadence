@@ -1,0 +1,185 @@
+# Claude Cadence Prompt Configuration
+# This file defines all prompts used in the checkpoint supervision system
+
+# Shared context that appears in all agent prompts
+shared_agent_context:
+  supervision_explanation: |
+    === CHECKPOINT SUPERVISION CONTEXT ===
+    You are working under a checkpoint supervision system focused on task completion.
+    Primary goal: Complete your assigned tasks efficiently
+    Safety limit: Maximum {checkpoint_turns} turns before automatic checkpoint
+    Total checkpoints available: {max_checkpoints}
+    
+    IMPORTANT: Focus on completing tasks, not counting turns. The turn limit is only a safety measure.
+  
+  work_guidelines: |
+    TASK COMPLETION PRIORITY:
+    1. Focus on completing assigned tasks, not managing turns
+    2. Work naturally - take the turns you need to finish properly
+    3. Exit immediately when all tasks are complete
+    4. The {checkpoint_turns} turn limit is just a safety net
+    5. Quality completion matters more than speed
+    
+    Progress indicators:
+    - Clearly mark completed tasks with structured output:
+      {"task_complete": {"task_id": "1", "task_title": "Create file X"}}
+    - Note any blockers for supervisor review
+    - State "ALL TASKS COMPLETE" when all tasks are finished
+  
+  early_exit_protocol: |
+    EARLY EXIT PROTOCOL:
+    - If you complete all assigned tasks before using all turns, state 'ALL TASKS COMPLETE' and exit
+    - Do not continue working beyond what was requested
+    - Do not wait for confirmation after completing tasks
+
+# Initial agent prompt template
+agent_prompts:
+  initial:
+    sections:
+      - "{shared_agent_context.supervision_explanation}"
+      - "{shared_agent_context.work_guidelines}"
+      - "{shared_agent_context.early_exit_protocol}"
+      - "{task_breakdown}"  # Generated dynamically if tasks exist
+      - |
+        === YOUR OBJECTIVE ===
+        {task_description}
+        
+        Remember: Complete your tasks thoroughly. The turn limit ({checkpoint_turns}) is just a safety net.
+        Begin working on the task now.
+  
+  # Continuation prompt for subsequent checkpoints
+  continuation:
+    sections:
+      - |
+        === CHECKPOINT CONTINUATION ===
+        This is checkpoint {current_checkpoint} of {max_checkpoints}.
+        Focus: Complete remaining tasks (turn safety limit: {checkpoint_turns})
+      - "{progress_summary}"  # Generated dynamically
+      - "{remaining_work}"    # Generated dynamically
+      - "{issues_section}"    # Generated dynamically if issues exist
+      - |
+        === SUPERVISOR GUIDANCE ===
+        {supervisor_guidance}
+      - "{checkpoint_warnings}"  # Generated for final checkpoints
+      - "{shared_agent_context.work_guidelines}"
+      - |
+        === ORIGINAL OBJECTIVE (for context) ===
+        {original_task}
+        
+        Continue working to complete all tasks.
+        Remember: When all tasks are done, state 'ALL TASKS COMPLETE' and exit immediately.
+
+# Task-specific templates
+task_templates:
+  task_breakdown: |
+    === TASK BREAKDOWN ===
+    The following tasks need to be completed:
+    
+    {task_list}
+    
+    Focus on completing tasks systematically. Mark your progress clearly.
+    When all tasks show ✅, state 'ALL TASKS COMPLETE' and exit immediately.
+  
+  task_item: "{status_icon} Task {task_id}: {task_title}"
+  task_details: "   Details: {task_description}"
+  
+  progress_summary: |
+    === COMPLETED WORK ===
+    The following has been accomplished:
+    {completed_items}
+  
+  remaining_work: |
+    === REMAINING WORK ===
+    Still need to complete:
+    {remaining_items}
+  
+  issues_section: |
+    === ISSUES TO ADDRESS ===
+    {issue_list}
+
+# Checkpoint-specific warnings
+checkpoint_warnings:
+  final: |
+    ⚠️  THIS IS YOUR FINAL CHECKPOINT!
+    Focus on completing the most critical remaining work.
+    Ensure the solution is functional even if not all features are complete.
+  
+  penultimate: |
+    📍 You have only 1 checkpoint remaining after this one.
+    Prioritize core functionality and critical tasks.
+
+# Supervisor analysis prompts
+supervisor_prompts:
+  analysis:
+    sections:
+      - |
+        === SUPERVISOR ANALYSIS TASK ===
+        You are a senior software architect reviewing checkpoint progress.
+        Analyze the work done and provide strategic guidance.
+        
+        Checkpoint: {current_checkpoint} of {max_checkpoints}
+        Turns used: {turns_used}
+      - |
+        === ORIGINAL OBJECTIVE ===
+        {original_task}
+      - "{task_progress}"  # Generated if tasks exist
+      - "{checkpoint_history}"  # Generated from previous checkpoints
+      - |
+        === CHECKPOINT OUTPUT TO ANALYZE ===
+        {checkpoint_output}
+      - |
+        === ANALYSIS REQUIRED ===
+        Provide a strategic analysis covering:
+        1. Is the agent making appropriate progress toward the objective?
+        2. Are there any critical issues or blockers?
+        3. What specific guidance would help the next checkpoint?
+        4. Should the agent adjust priorities or approach?
+        
+        Be specific and actionable in your guidance.
+        Focus on architectural decisions and avoiding common pitfalls.
+        
+        Format your response as clear, bullet-pointed guidance.
+  
+  task_progress_template: |
+    === TASK PROGRESS ===
+    Completed: {completed_count} tasks
+    Remaining: {remaining_count} tasks
+  
+  checkpoint_history_template: |
+    === CHECKPOINT HISTORY ===
+    {history_items}
+  
+  history_item: "Checkpoint {num}: {summary}"
+
+# Final summary template
+final_summary:
+  template: |
+    === SUPERVISION SESSION COMPLETE ===
+    Total checkpoints used: {checkpoints_used} of {max_checkpoints}
+    Total estimated cost: ${total_cost:.4f}
+    Estimated duration: ~{duration_minutes} minutes
+    
+    === OBJECTIVE ===
+    {original_task}
+    
+    {completed_section}
+    {incomplete_section}
+    
+    === CHECKPOINT PROGRESSION ===
+    {checkpoint_progression}
+    
+    {recommendations}
+  
+  completed_section: |
+    === COMPLETED TASKS ===
+    {completed_list}
+  
+  incomplete_section: |
+    === INCOMPLETE TASKS ===
+    {incomplete_list}
+  
+  recommendations: |
+    === RECOMMENDATIONS ===
+    Consider running another supervision session to complete remaining tasks.
+    Alternatively, continue manually with the following focus:
+    {focus_items}

@@ -1,0 +1,8 @@
+# Claude Cadence dependencies
+
+# Required dependencies
+PyYAML>=6.0.0  # For YAML prompt configuration
+
+# Optional dependencies for enhanced features:
+# rich>=13.0.0  # For beautiful terminal output
+# pytest>=7.0.0  # For running tests
