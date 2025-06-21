@@ -53,7 +53,17 @@ shared_agent_context:
          [Fill when all TODOs done]
          ```
     
-    2. FOCUS: Complete ONLY the assigned TODOs - avoid scope creep
+    2. CODE NAVIGATION: Use Serena MCP tools for efficient code analysis
+       - When available, prefer Serena's semantic tools over basic file operations:
+         ✅ Use mcp__serena__find_symbol to locate functions/classes
+         ✅ Use mcp__serena__get_symbols_overview to understand code structure
+         ✅ Use mcp__serena__replace_symbol_body for precise function updates
+         ✅ Use mcp__serena__find_referencing_symbols to trace dependencies
+         ❌ Avoid reading entire files when you only need specific symbols
+         ❌ Don't use grep/search when Serena can find symbols semantically
+       - Serena works at the symbol level, providing more accurate code edits
+    
+    3. FOCUS: Complete ONLY the assigned TODOs - avoid scope creep
        - Minor improvements are OK if they directly support the TODO:
          ✅ Adding docstrings to functions you create
          ✅ Basic error handling for code you write
@@ -62,7 +72,7 @@ shared_agent_context:
          ❌ Refactoring existing code beyond the TODO scope
          ❌ Adding new dependencies or frameworks
     
-    3. SAFETY: You have --dangerously-skip-permissions enabled
+    4. SAFETY: You have --dangerously-skip-permissions enabled
        - NEVER perform destructive operations without explicit TODO instruction
        - NEVER delete repositories, drop databases, or remove critical files
        - DANGEROUS COMMANDS requiring extra caution:
@@ -72,7 +82,7 @@ shared_agent_context:
          * Any command with `sudo` or affecting system files
        - When in doubt, note the risky operation in your scratchpad and proceed cautiously
     
-    4. PROGRESS: Update your scratchpad IMMEDIATELY after EACH TODO:
+    5. PROGRESS: Update your scratchpad IMMEDIATELY after EACH TODO:
        - As soon as you complete a TODO, update the scratchpad
        - This ensures progress is saved even if execution stops
        - Log each completion in your scratchpad:
@@ -83,7 +93,7 @@ shared_agent_context:
          Notes: [any issues or deviations]
          ```
     
-    5. REQUESTING HELP: If you encounter situations where you're genuinely stuck:
+    6. REQUESTING HELP: If you encounter situations where you're genuinely stuck:
        - Update your scratchpad with:
          ```
          ## HELP NEEDED
@@ -101,7 +111,7 @@ shared_agent_context:
        - "SECURITY_REVIEW_NEEDED" - For security concerns
        - "PERFORMANCE_REVIEW_NEEDED" - For optimization questions
     
-    6. COMPLETION: When ALL TODOs are done:
+    7. COMPLETION: When ALL TODOs are done:
        - Update the "Completion Summary" section in your scratchpad
        - Include: what was completed (✅), issues encountered (⚠️), follow-up suggestions (💡)
        - Declare "ALL TASKS COMPLETE"
@@ -278,10 +288,35 @@ supervisor_prompts:
         4. If execution stopped early, what caused it?
         5. What guidance would help complete remaining work?
         
-        Be specific and actionable in your guidance.
-        If the agent was interrupted, prioritize the most critical remaining TODOs.
+        === ZEN ASSISTANCE EVALUATION ===
         
-        Format your response as clear, bullet-pointed guidance.
+        Evaluate if zen assistance would be beneficial:
+        
+        STUCK DETECTION:
+        - Did the agent explicitly request help ("HELP NEEDED", "Status: STUCK")?
+        - Is the agent blocked on a specific technical issue?
+        
+        ERROR PATTERNS:
+        - Are there repeated errors (same error 3+ times)?
+        - Are the errors preventing progress?
+        
+        TASK CUTOFF:
+        - Did the agent appear to be cut off mid-work?
+        - Are there signs of incomplete execution (no completion message, work in progress)?
+        
+        CRITICAL VALIDATION:
+        - Does this task involve security, database, or payment operations?
+        - Would expert review improve safety/quality?
+        
+        If ANY of these conditions are met, recommend zen assistance with:
+        - Tool to use (debug, review, precommit, analyze)
+        - Specific reason for the recommendation
+        
+        Format your response with:
+        1. Task progress summary
+        2. Issues/blockers identified
+        3. Zen recommendation (if applicable): "ZEN_RECOMMENDED: [tool] - [reason]"
+        4. Continuation guidance
   
   task_progress_template: |
     === TASK PROGRESS ===

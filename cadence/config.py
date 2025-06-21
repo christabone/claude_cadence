@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 # Constants for system-wide strings
 COMPLETION_PHRASE = "ALL TASKS COMPLETE"
 SCRATCHPAD_DIR = ".cadence/scratchpad"
+SUPERVISOR_LOG_DIR = ".cadence/supervisor"
 
 
 @dataclass
@@ -40,7 +41,7 @@ class ZenIntegrationConfig:
     enabled: bool = True
     stuck_detection: bool = True
     auto_debug_threshold: int = 3  # Number of errors before calling zen
-    retrospective_turn_threshold: float = 0.8  # Percentage of max turns
+    cutoff_detection: bool = True  # Detect if task was cut off at turn limit
     
     # Selective task validation patterns
     validate_on_complete: List[str] = field(default_factory=lambda: [

@@ -61,11 +61,9 @@ class ZenIntegration:
             if validation_needed:
                 return "precommit", f"Critical task validation: {validation_needed}"
                 
-        # Check if retrospective needed (high turn usage)
-        if hasattr(result, 'turns_used') and hasattr(context, 'max_turns'):
-            turn_percentage = result.turns_used / context.max_turns
-            if turn_percentage >= self.config.retrospective_turn_threshold:
-                return "analyze", f"High turn usage ({int(turn_percentage * 100)}%)"
+        # Check if task was likely cut off (needs retrospective)
+        if self._detect_cutoff(result, context):
+            return "analyze", "Task appears to have been cut off at turn limit"
                 
         return None
         
@@ -134,6 +132,33 @@ class ZenIntegration:
             # Use first few words as category
             words = error.split()[:5]
             return "_".join(words).lower()
+            
+    def _detect_cutoff(self, result, context) -> bool:
+        """Detect if execution was likely cut off at turn limit"""
+        # Check if task is incomplete
+        if hasattr(result, 'task_complete') and result.task_complete:
+            return False  # Task completed successfully
+            
+        # Check for signs of being cut off
+        if hasattr(result, 'output_lines') and len(result.output_lines) > 0:
+            last_lines = "\n".join(result.output_lines[-50:])
+            
+            # Look for signs of incomplete work
+            cutoff_indicators = [
+                "ALL TASKS COMPLETE" not in last_lines,
+                "HELP NEEDED" not in last_lines,  # Not a help request
+                hasattr(context, 'remaining_todos') and len(context.remaining_todos) > 0,
+                "in progress" in last_lines.lower(),
+                "working on" in last_lines.lower(),
+                "next, i'll" in last_lines.lower(),
+                "let me" in last_lines.lower()
+            ]
+            
+            # If multiple indicators suggest cutoff
+            if sum(cutoff_indicators) >= 3:
+                return True
+                
+        return False
             
     def _task_requires_validation(self, task_description: str) -> Optional[str]:
         """Check if task matches validation patterns"""
