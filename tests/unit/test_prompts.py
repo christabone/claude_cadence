@@ -273,6 +273,7 @@ class TestTodoPromptManager:
         
         prompt = manager.get_continuation_prompt(
             analysis_guidance="Great work! Here are new tasks",
+            continuation_context="Previous execution completed successfully",
             supervisor_analysis=supervisor_analysis
         )
         

@@ -87,6 +87,22 @@ class YAMLPromptLoader:
             
         return result
         
+    def get_template(self, path: str) -> str:
+        """Get a template by dot-separated path"""
+        parts = path.split('.')
+        value = self.config
+        
+        for part in parts:
+            if isinstance(value, dict) and part in value:
+                value = value[part]
+            else:
+                return ""
+                
+        # If it's a string, format it to resolve any references
+        if isinstance(value, str):
+            return self.format_template(value, {})
+        return ""
+        
     def build_prompt_from_sections(self, sections: List[str], context: Dict[str, Any]) -> str:
         """Build a prompt from a list of sections"""
         formatted_sections = []
@@ -107,9 +123,20 @@ class YAMLPromptLoader:
 class PromptGenerator:
     """Generates context-aware prompts for agents and supervisors"""
     
-    def __init__(self, config_path: Optional[str] = None):
-        """Initialize with optional custom config path"""
-        self.loader = YAMLPromptLoader(config_path)
+    def __init__(self, loader_or_config_path=None):
+        """Initialize with YAMLPromptLoader or config path"""
+        if isinstance(loader_or_config_path, YAMLPromptLoader):
+            self.loader = loader_or_config_path
+        else:
+            self.loader = YAMLPromptLoader(loader_or_config_path)
+    
+    def get_initial_prompt(self, *args, **kwargs):
+        """Alias for generate_initial_todo_prompt"""
+        return self.generate_initial_todo_prompt(*args, **kwargs)
+        
+    def get_continuation_prompt(self, *args, **kwargs):
+        """Alias for generate_continuation_prompt"""
+        return self.generate_continuation_prompt(*args, **kwargs)
     
     def generate_initial_todo_prompt(
         self,
@@ -374,8 +401,17 @@ class TodoPromptManager:
             remaining_todos=todos.copy()
         )
         self.generator = PromptGenerator(config_path)
-        self.session_id = "unknown"
+        self.session_id = ""
         self.task_numbers = ""
+        
+    def update_progress(self, completed_todos: List[str], remaining_todos: List[str]):
+        """Update execution progress"""
+        self.context.completed_todos = completed_todos
+        self.context.remaining_todos = remaining_todos
+        
+    def add_issue(self, issue: str):
+        """Add an issue encountered during execution"""
+        self.context.issues_encountered.append(issue)
         
     def get_initial_prompt(self) -> str:
         """Get the initial agent prompt with TODOs"""

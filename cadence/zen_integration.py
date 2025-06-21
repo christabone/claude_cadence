@@ -21,14 +21,17 @@ class ZenRequest:
     """Request for zen assistance"""
     tool: str  # debug, review, consensus, precommit, analyze
     reason: str
-    context: Dict[str, Any]
+    context: Optional[Dict[str, Any]] = None
     priority: str = "normal"  # low, normal, high, critical
+    session_id: Optional[str] = None
+    execution_history: Optional[List[Dict]] = None
+    scratchpad_path: Optional[str] = None
 
 
 class ZenIntegration:
     """Manages integration with zen MCP tools for supervisor assistance"""
     
-    def __init__(self, config: ZenIntegrationConfig, verbose: bool = True):
+    def __init__(self, config: ZenIntegrationConfig, verbose: bool = False):
         """Initialize zen integration with configuration"""
         self.config = config
         self.verbose = verbose
@@ -93,6 +96,10 @@ class ZenIntegration:
                     return f"Agent requested: {pattern}"
                     
         return None
+        
+    def _detect_stuck_agent(self, result, context, session_id: str) -> Optional[str]:
+        """Alias for _detect_stuck_status for backward compatibility"""
+        return self._detect_stuck_status(result, session_id)
         
     def _detect_error_pattern(self, result, session_id: str) -> Optional[str]:
         """Check for repeated error patterns"""
@@ -160,12 +167,12 @@ class ZenIntegration:
                 
         return False
             
-    def _task_requires_validation(self, task_description: str) -> Optional[str]:
+    def _task_requires_validation(self, task_description) -> Optional[str]:
         """Check if task matches validation patterns"""
         if not task_description:
             return None
             
-        task_lower = task_description.lower()
+        task_lower = str(task_description).lower()
         for pattern in self.config.validate_on_complete:
             # Convert glob pattern to regex
             regex_pattern = pattern.replace("*", ".*")
@@ -173,6 +180,74 @@ class ZenIntegration:
                 return f"Matches pattern: {pattern}"
                 
         return None
+        
+    def _detect_repeated_errors(self, result, context=None) -> Tuple[bool, int]:
+        """Legacy method for backward compatibility"""
+        # This is now handled by _detect_error_pattern
+        if not hasattr(result, 'errors') or not result.errors:
+            return False, 0
+        # Simple check: if there are many similar errors
+        error_types = {}
+        for error in result.errors:
+            error_key = self._categorize_error(error)
+            error_types[error_key] = error_types.get(error_key, 0) + 1
+        # Return True if any error type appears 3+ times
+        max_count = max(error_types.values()) if error_types else 0
+        return max_count >= 3, max_count
+        
+    def _is_critical_task(self, context) -> bool:
+        """Check if current task is critical"""
+        if hasattr(context, 'current_task') and context.current_task:
+            task_lower = str(context.current_task).lower()
+            critical_patterns = [
+                'payment', 'security', 'auth', 'database', 'migration',
+                'production', 'deploy', 'critical', 'urgent'
+            ]
+            return any(pattern in task_lower for pattern in critical_patterns)
+        return False
+        
+    def _create_zen_request(self, tool: str, reason: str, execution_result, 
+                           context, session_id: str, priority: str = "normal") -> ZenRequest:
+        """Create a zen request object"""
+        # Build execution history
+        execution_history = []
+        if hasattr(execution_result, '__dict__'):
+            execution_history.append({
+                'success': execution_result.success,
+                'turns_used': execution_result.turns_used,
+                'errors': execution_result.errors if hasattr(execution_result, 'errors') else [],
+                'metadata': execution_result.metadata if hasattr(execution_result, 'metadata') else {}
+            })
+            
+        # Build context dict
+        context_dict = {}
+        if hasattr(context, 'todos'):
+            context_dict['todos'] = context.todos
+        if hasattr(context, 'completed_todos'):
+            context_dict['completed_todos'] = context.completed_todos
+        if hasattr(context, 'remaining_todos'):
+            context_dict['remaining_todos'] = context.remaining_todos
+            
+        return ZenRequest(
+            tool=tool,
+            reason=reason,
+            context=context_dict,
+            priority=priority,
+            session_id=session_id,
+            execution_history=execution_history,
+            scratchpad_path=f".cadence/scratchpad/session_{session_id}.md"
+        )
+        
+    def _call_zen_tool(self, request: ZenRequest) -> Dict[str, Any]:
+        """Execute zen tool call"""
+        # This would be the actual implementation
+        # For now, return a mock response
+        return {
+            "tool": request.tool,
+            "success": True,
+            "guidance": f"Mock response for {request.tool}",
+            "response": f"Mock response for {request.tool}"
+        }
         
     def call_zen_support(self, tool: str, reason: str, 
                         execution_result, context, session_id: str) -> Dict[str, Any]:
@@ -279,6 +354,7 @@ Focus on actionable next steps.
         # For now, return mock response - real implementation would call zen
         return {
             "tool": "debug",
+            "success": True,
             "model": model,
             "thinking_mode": thinking_mode,
             "guidance": f"[Zen debug analysis would appear here for: {reason}]",
@@ -328,6 +404,15 @@ Focus on actionable next steps.
         Returns:
             String guidance to include in continuation prompt
         """
+        # Check if zen call was successful
+        if not zen_response.get("success", False):
+            error = zen_response.get("error", "Unknown error")
+            return f"""
+=== SUPERVISOR GUIDANCE ===
+Assistance was requested but encountered an issue: {error}
+Proceed with standard debugging approaches.
+"""
+        
         tool = zen_response.get("tool", "unknown")
         guidance = zen_response.get("guidance", "No specific guidance provided")
         
@@ -337,6 +422,7 @@ Focus on actionable next steps.
             return f"""
 === EXPERT ASSISTANCE PROVIDED ===
 The supervisor consulted with specialized debugging assistance.
+Zen assistance provided.
 
 Key insights:
 {guidance}
@@ -351,6 +437,7 @@ Focus on addressing these specific issues before continuing with remaining TODOs
             return f"""
 === VALIDATION FEEDBACK ===
 Your work has been reviewed for safety and correctness.
+Zen assistance provided.
 
 {guidance}
 
@@ -360,5 +447,6 @@ Address any concerns mentioned above before marking the task as complete.
         else:
             return f"""
 === SUPERVISOR GUIDANCE ===
+Zen assistance provided.
 {guidance}
 """

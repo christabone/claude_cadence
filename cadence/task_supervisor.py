@@ -13,7 +13,7 @@ import queue
 import threading
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime
 import uuid
@@ -30,7 +30,7 @@ class ExecutionResult:
     turns_used: int
     output_lines: List[str]
     errors: List[str]
-    metadata: Dict[str, any]
+    metadata: Dict[str, Any]
     task_complete: bool
 
 
@@ -548,7 +548,10 @@ Model: {self.model}
             if turns_used == 0:
                 # Simple estimation based on output - this is not accurate
                 # but gives us something to work with
-                turns_used = min(self.max_turns, max(1, len(output_lines) // 100))
+                # Count substantive output lines (more than 50 chars)
+                substantive_lines = [line for line in output_lines if len(line) > 50]
+                # Estimate based on substantive output
+                turns_used = min(self.max_turns, max(1, len(substantive_lines)))
                 self.logger.warning(f"Turn count is estimated: {turns_used}")
                     
             success = process.returncode == 0

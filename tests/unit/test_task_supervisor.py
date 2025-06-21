@@ -51,38 +51,40 @@ class TestTaskSupervisor:
         assert f"Session ID: {session_id}" in content
         assert f"Max Turns: {supervisor.max_turns}" in content
         
-    def test_scratchpad_status_check(self, supervisor, mock_scratchpad):
+    def test_scratchpad_status_check(self, supervisor, mock_scratchpad, temp_dir):
         """Test scratchpad status checking"""
         session_id = "test_123"
         
-        # Test non-existent scratchpad
-        status = supervisor._check_scratchpad_status(session_id)
-        assert status["exists"] is False
-        
-        # Test scratchpad with help needed
-        mock_scratchpad(session_id, """
-        # Scratchpad
-        ## HELP NEEDED
-        Status: STUCK
-        Issue: Cannot find the file
-        """)
-        
-        status = supervisor._check_scratchpad_status(session_id)
-        assert status["exists"] is True
-        assert status["has_help_needed"] is True
-        assert status["has_all_complete"] is False
-        
-        # Test completed scratchpad
-        mock_scratchpad(session_id + "_2", """
-        # Scratchpad
-        ## Completion Summary
-        ALL TASKS COMPLETE
-        """)
-        
-        status = supervisor._check_scratchpad_status(session_id + "_2")
-        assert status["exists"] is True
-        assert status["has_help_needed"] is False
-        assert status["has_all_complete"] is True
+        # Patch SCRATCHPAD_DIR to use temp directory
+        with patch('cadence.task_supervisor.SCRATCHPAD_DIR', str(temp_dir / ".cadence/scratchpad")):
+            # Test non-existent scratchpad
+            status = supervisor._check_scratchpad_status(session_id)
+            assert status["exists"] is False
+            
+            # Test scratchpad with help needed
+            mock_scratchpad(session_id, """
+            # Scratchpad
+            ## HELP NEEDED
+            Status: STUCK
+            Issue: Cannot find the file
+            """)
+            
+            status = supervisor._check_scratchpad_status(session_id)
+            assert status["exists"] is True
+            assert status["has_help_needed"] is True
+            assert status["has_all_complete"] is False
+            
+            # Test completed scratchpad
+            mock_scratchpad(session_id + "_2", """
+            # Scratchpad
+            ## Completion Summary
+            ALL TASKS COMPLETE
+            """)
+            
+            status = supervisor._check_scratchpad_status(session_id + "_2")
+            assert status["exists"] is True
+            assert status["has_help_needed"] is False
+            assert status["has_all_complete"] is True
         
     def test_build_todo_prompt(self, supervisor):
         """Test TODO prompt building"""
@@ -246,10 +248,16 @@ class TestTaskSupervisor:
             # Mock task loading
             mock_manager = Mock()
             mock_manager.load_tasks.return_value = True
-            mock_manager.tasks = [
-                Mock(id="1", title="Task 1", description="Desc 1", is_complete=Mock(return_value=False)),
-                Mock(id="2", title="Task 2", description="Desc 2", is_complete=Mock(return_value=False))
-            ]
+            # Create proper mock tasks with __dict__ attribute
+            task1 = Mock(id="1", title="Task 1", description="Desc 1")
+            task1.is_complete.return_value = False
+            task1.__dict__ = {"id": "1", "title": "Task 1", "description": "Desc 1", "status": "pending"}
+            
+            task2 = Mock(id="2", title="Task 2", description="Desc 2")
+            task2.is_complete.return_value = False
+            task2.__dict__ = {"id": "2", "title": "Task 2", "description": "Desc 2", "status": "pending"}
+            
+            mock_manager.tasks = [task1, task2]
             mock_tm.return_value = mock_manager
             
             # Mock prompt manager
