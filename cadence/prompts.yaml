@@ -46,6 +46,9 @@ shared_agent_context:
          ## Issues/Blockers
          [Note any problems immediately]
          
+         ## Help Requests
+         [Document if you need assistance]
+         
          ## Completion Summary
          [Fill when all TODOs done]
          ```
@@ -80,7 +83,25 @@ shared_agent_context:
          Notes: [any issues or deviations]
          ```
     
-    5. COMPLETION: When ALL TODOs are done:
+    5. REQUESTING HELP: If you encounter situations where you're genuinely stuck:
+       - Update your scratchpad with:
+         ```
+         ## HELP NEEDED
+         Status: STUCK
+         Issue: [Clear description of the problem]
+         Attempted: [What you've tried so far]
+         Context: [Relevant files/errors]
+         Recommendation: [What kind of help would be most useful]
+         ```
+       - State "HELP NEEDED - STUCK" clearly
+       - Exit to allow supervisor to bring in specialized assistance
+       
+       You can also request specific reviews:
+       - "ARCHITECTURE_REVIEW_NEEDED" - For design decisions
+       - "SECURITY_REVIEW_NEEDED" - For security concerns
+       - "PERFORMANCE_REVIEW_NEEDED" - For optimization questions
+    
+    6. COMPLETION: When ALL TODOs are done:
        - Update the "Completion Summary" section in your scratchpad
        - Include: what was completed (✅), issues encountered (⚠️), follow-up suggestions (💡)
        - Declare "ALL TASKS COMPLETE"
@@ -227,9 +248,16 @@ supervisor_prompts:
         IMPORTANT: Check the scratchpad file at: .cadence/scratchpad/session_{session_id}.md
         - If you see "ALL TASKS COMPLETE" in the scratchpad, the agent finished normally
         - If you DON'T see this, the agent may have been interrupted or hit the turn limit
+        - Look for "HELP NEEDED" or "Status: STUCK" - the agent may need assistance
         - Review what was completed vs. what remains
         
         Turns used: {turns_used} of {max_turns}
+        
+        Available assistance: If the agent needs help, zen MCP tools can provide:
+        - Debugging assistance for stuck situations
+        - Code review for quality concerns
+        - Architecture guidance for design decisions
+        - Performance analysis for optimization needs
       - |
         === ORIGINAL OBJECTIVE ===
         {original_task}

@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Task Master task number tracking in prompts
 - YAML-based prompt configuration with template inheritance
 - Constants for system-wide strings (COMPLETION_PHRASE, SCRATCHPAD_DIR)
+- **Zen MCP Integration**: Intelligent assistance for stuck agents
+  - Automatic detection of stuck/blocked agents via "HELP NEEDED" protocol
+  - Error pattern detection with configurable thresholds
+  - Task validation for critical operations (security, database, etc.)
+  - Retrospective analysis for high turn usage (>80% configurable)
+  - Support for multiple zen tools: debug, review, consensus, precommit, analyze
+- **MCP Server Checker**: Preprocess script to verify MCP installations
+  - Checks Claude CLI availability
+  - Validates required MCP servers (zen, taskmaster-ai)
+  - Provides installation guidance for missing servers
 
 ### Changed
 - Refactored prompt generation to use YAML templates

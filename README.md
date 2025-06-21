@@ -20,6 +20,10 @@ Claude Cadence provides a framework for managing Claude Code agents through task
 - **Flexible Configuration**: YAML-based configuration for all settings
 - **Enhanced Prompts**: Comprehensive agent context with safety-first design
 - **Continuation Support**: Dynamic prompts for resumed execution with full context preservation
+- **Zen MCP Integration**: Intelligent assistance when agents need help
+  - Automatic stuck detection and debugging support
+  - Code review and validation for critical tasks
+  - Retrospective analysis for learning
 
 ## Installation
 
@@ -27,6 +31,9 @@ Claude Cadence provides a framework for managing Claude Code agents through task
 git clone https://github.com/christabone/claude_cadence.git
 cd claude_cadence
 pip install -r requirements.txt  # Minimal dependencies
+
+# Check MCP servers are installed
+python scripts/check_mcp_servers.py
 ```
 
 ## Quick Start
@@ -71,6 +78,33 @@ The prompt system prioritizes safety and reliability:
 - **Dynamic Adaptation**: Prompts adjust based on completion status and issues
 - **Safety-First Design**: Explicit warnings about `--dangerously-skip-permissions`
 
+### Zen Integration
+
+Claude Cadence integrates with zen MCP tools to provide assistance when agents encounter difficulties:
+
+#### Help Protocol
+Agents can request help by updating their scratchpad:
+```markdown
+## HELP NEEDED
+Status: STUCK
+Issue: [Description of the problem]
+Attempted: [What has been tried]
+Context: [Relevant files/errors]
+```
+
+Then declare "HELP NEEDED - STUCK" and exit. The supervisor will:
+1. Detect the help request
+2. Call appropriate zen tools (debug, review, etc.)
+3. Generate continuation guidance
+4. Resume execution with expert insights
+
+#### Automatic Assistance
+The supervisor automatically calls zen when:
+- Same error occurs 3+ times (configurable)
+- Agent uses >80% of max turns (configurable)
+- Critical tasks match validation patterns
+- Architecture/security/performance reviews are requested
+
 ## Configuration
 
 Configuration is managed through `config.yaml`:
@@ -87,6 +121,15 @@ agent:
 supervisor:
   model: "heuristic"    # or "claude-3-opus-latest" for LLM supervision
   verbose: true
+  zen_integration:
+    enabled: true
+    stuck_detection: true
+    auto_debug_threshold: 3     # Errors before calling zen
+    retrospective_turn_threshold: 0.8  # 80% of max turns
+    validate_on_complete:
+      - "*security*"
+      - "*database*"
+      - "*critical*"
 ```
 
 ## Documentation
@@ -100,6 +143,7 @@ supervisor:
 - Python 3.8+
 - Claude Code CLI installed (`npm install -g @anthropic-ai/claude-code`)
 - Task Master MCP server for task management
+- Zen MCP server for enhanced assistance (recommended)
 
 ## License
 

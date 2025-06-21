@@ -35,6 +35,38 @@ class AgentConfig:
 
 
 @dataclass
+class ZenIntegrationConfig:
+    """Zen MCP integration configuration"""
+    enabled: bool = True
+    stuck_detection: bool = True
+    auto_debug_threshold: int = 3  # Number of errors before calling zen
+    retrospective_turn_threshold: float = 0.8  # Percentage of max turns
+    
+    # Selective task validation patterns
+    validate_on_complete: List[str] = field(default_factory=lambda: [
+        "*security*", "*database*", "*critical*", "*auth*", "*payment*"
+    ])
+    
+    # Model configurations for different scenarios
+    models: Dict[str, List[str]] = field(default_factory=lambda: {
+        "debug": ["o3", "pro"],           # For stuck/errors
+        "review": ["pro"],                # For code review
+        "consensus": ["o3", "pro", "flash"],  # For decisions
+        "precommit": ["pro"],             # For validation
+        "analyze": ["pro"]                # For retrospectives
+    })
+    
+    # Thinking modes for each model type
+    thinking_modes: Dict[str, str] = field(default_factory=lambda: {
+        "debug": "high",
+        "review": "high", 
+        "consensus": "medium",
+        "precommit": "high",
+        "analyze": "medium"
+    })
+
+
+@dataclass
 class SupervisorConfig:
     """Supervisor analysis configuration"""
     model: str = "heuristic"
@@ -46,6 +78,7 @@ class SupervisorConfig:
         "check_progress_indicators": True,
         "check_blockers": True
     })
+    zen_integration: ZenIntegrationConfig = field(default_factory=ZenIntegrationConfig)
 
 
 @dataclass

@@ -19,6 +19,7 @@ import uuid
 from .prompts import TodoPromptManager
 from .task_manager import TaskManager, Task
 from .config import ConfigLoader, CadenceConfig
+from .zen_integration import ZenIntegration
 
 
 @dataclass
@@ -79,6 +80,12 @@ class TaskSupervisor:
         self.allowed_tools = allowed_tools or config.agent.tools
         self.timeout = timeout or config.execution.timeout
         self.execution_history = []
+        
+        # Initialize zen integration if enabled
+        self.zen = ZenIntegration(
+            config.supervisor.zen_integration, 
+            verbose=self.verbose
+        )
         
     def execute_with_todos(self, todos: List[str], task_list: Optional[List[Dict]] = None, 
                           continuation_context: Optional[str] = None, session_id: Optional[str] = None) -> ExecutionResult:
@@ -299,7 +306,7 @@ class TaskSupervisor:
             "scratchpad_path": f".cadence/scratchpad/session_{session_id}.md"
         }
         
-        return ExecutionResult(
+        result = ExecutionResult(
             success=success,
             turns_used=turns_used,
             output_lines=output_lines,
@@ -307,6 +314,21 @@ class TaskSupervisor:
             metadata=metadata,
             task_complete=task_complete
         )
+        
+        # Check if zen assistance is needed
+        zen_check = self.zen.should_call_zen(result, self.prompt_manager.context, session_id)
+        if zen_check:
+            tool, reason = zen_check
+            if self.verbose:
+                print(f"\n🔮 Zen assistance needed: {tool} - {reason}")
+            
+            # Store zen recommendation in metadata
+            result.metadata['zen_needed'] = {
+                'tool': tool,
+                'reason': reason
+            }
+        
+        return result
         
     def _build_todo_prompt(self, todos: List[str], continuation_context: Optional[str] = None) -> str:
         """Build prompt with TODO list for agent"""
@@ -455,3 +477,41 @@ IMPORTANT:
         except Exception as e:
             print(f"❌ Error running with Task Master: {e}")
             return False
+            
+    def handle_zen_assistance(self, execution_result: ExecutionResult, 
+                            session_id: str) -> Dict[str, Any]:
+        """
+        Handle zen assistance request from execution result
+        
+        Args:
+            execution_result: The execution result with zen_needed metadata
+            session_id: Current session ID
+            
+        Returns:
+            Dict with zen response and continuation guidance
+        """
+        zen_needed = execution_result.metadata.get('zen_needed')
+        if not zen_needed:
+            return {}
+            
+        tool = zen_needed['tool']
+        reason = zen_needed['reason']
+        
+        # Call zen for assistance
+        zen_response = self.zen.call_zen_support(
+            tool=tool,
+            reason=reason,
+            execution_result=execution_result,
+            context=self.prompt_manager.context,
+            session_id=session_id
+        )
+        
+        # Generate continuation guidance
+        continuation_guidance = self.zen.generate_continuation_guidance(zen_response)
+        
+        return {
+            'zen_response': zen_response,
+            'continuation_guidance': continuation_guidance,
+            'zen_tool_used': tool,
+            'zen_reason': reason
+        }

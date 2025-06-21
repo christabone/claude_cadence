@@ -9,6 +9,7 @@ until reaching a maximum turn limit.
 from .task_supervisor import TaskSupervisor, ExecutionResult
 from .config import ConfigLoader, CadenceConfig
 from .task_manager import TaskManager, Task
+from .zen_integration import ZenIntegration, ZenRequest
 
 __version__ = "0.1.0"
 
@@ -18,5 +19,7 @@ __all__ = [
     "ConfigLoader", 
     "CadenceConfig",
     "TaskManager",
-    "Task"
+    "Task",
+    "ZenIntegration",
+    "ZenRequest"
 ]
