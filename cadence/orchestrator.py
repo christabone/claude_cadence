@@ -453,6 +453,8 @@ class SupervisorOrchestrator:
                             except Exception as e:
                                 logger.warning(f"Failed to load previous agent results: {e}")
                     
+                    logger.debug(f"Iteration {iteration}, has_previous_agent_result will be: {previous_agent_result is not None}")
+                    
                     # Build prompt using YAML templates
                     context = {
                         "project_root": str(self.project_root),

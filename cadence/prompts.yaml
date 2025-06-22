@@ -272,7 +272,11 @@ supervisor_prompts:
       - Context7 MCP (mcp__Context7__*) - For library documentation
       - Zen MCP (mcp__zen__*) - For code review and assistance
       
-      TASK: Analyze the current task state and decide what the agent should work on next.
+      {% if has_previous_agent_result %}
+      TASK: Process the agent's completed work, then analyze the current task state and decide what to do next.
+      {% else %}
+      TASK: Analyze the current task state and decide what the agent should work on first.
+      {% endif %}
       
       {% if has_previous_agent_result %}
       === CRITICAL: PROCESS AGENT'S COMPLETED WORK FIRST ===
