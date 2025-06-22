@@ -18,8 +18,9 @@ import uuid
 import shutil
 import logging
 
-from .constants import OrchestratorDefaults, FilePatterns
+from .constants import OrchestratorDefaults, FilePatterns, AgentPromptDefaults
 from .prompt_utils import PromptBuilder
+from .utils import generate_session_id
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -92,9 +93,8 @@ class SupervisorOrchestrator:
     
     def generate_session_id(self) -> str:
         """Generate unique session ID"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_id = str(uuid.uuid4())[:8]
-        return f"{timestamp}_{unique_id}"
+        return generate_session_id()
+
     
     def validate_path(self, path: Path, base_dir: Path) -> Path:
         """Ensure path is within base directory to prevent path traversal attacks"""
@@ -347,8 +347,8 @@ class SupervisorOrchestrator:
             try:
                 with open(output_file) as f:
                     content = f.read()
-                    completed_normally = "ALL TASKS COMPLETE" in content
-                    requested_help = "HELP NEEDED" in content
+                    completed_normally = AgentPromptDefaults.COMPLETION_SIGNAL.upper() in content.upper()
+                    requested_help = AgentPromptDefaults.HELP_SIGNAL.upper() in content.upper()
             except FileNotFoundError:
                 # Output file may not exist if process failed early
                 pass

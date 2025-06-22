@@ -182,7 +182,7 @@ class TestTodoPromptManager:
         assert manager.context.todos == todos
         assert manager.context.max_turns == 20
         assert len(manager.context.remaining_todos) == 3
-        assert manager.session_id == ""
+        assert manager.session_id == "unknown"
         assert manager.task_numbers == ""
         
     def test_update_progress(self):

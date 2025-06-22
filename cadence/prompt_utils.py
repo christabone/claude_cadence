@@ -126,7 +126,7 @@ Current Task: {task_id} - {title}
 Status: {completed_subtasks}/{total_subtasks} subtasks complete
 
 Remaining TODOs:
-{chr(10).join(f'- {todo}' for todo in todos)}
+{'\n'.join(f'- {todo}' for todo in todos)}
 """
         return context
     

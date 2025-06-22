@@ -9,6 +9,8 @@ execution:
   max_turns: 40
   # Timeout for each execution period (seconds)
   timeout: 600
+  # Timeout for subprocess calls (seconds)
+  subprocess_timeout: 300
   # Whether to save execution logs
   save_logs: true
   # Log directory (relative to working directory)
@@ -17,7 +19,7 @@ execution:
 # Agent configuration
 agent:
   # Model to use for the main agent execution
-  model: "claude-3-5-sonnet-20241022"  # Can be updated to "claude-sonnet-4-20250514" if available
+  model: "claude-sonnet-4-20250514"  # Updated to Sonnet 4
   # Tools available to the agent
   # Comment out any tools you want to disable
   tools:
@@ -39,7 +41,7 @@ agent:
 supervisor:
   # Model to use for checkpoint analysis
   # Options: "heuristic" (built-in), "claude-3-opus-latest", "claude-3-5-sonnet-20241022", "claude-opus-4-20250514"
-  model: "heuristic"  # Can be updated to "claude-opus-4-20250514" for AI supervision
+  model: "claude-opus-4-20250514"  # Updated to Opus 4 for AI supervision
   # Confidence threshold for intervention (0.0-1.0)
   intervention_threshold: 0.7
   # Whether to show detailed analysis
@@ -96,6 +98,10 @@ integrations:
     default_task_file: ".taskmaster/tasks/tasks.json"
     # Whether to update task status automatically
     auto_update_status: true
+    # Process subtasks instead of main tasks
+    process_subtasks: true
+    # How to group subtasks for execution
+    subtask_grouping: "by_task"  # "by_task" or "by_priority"
   
   # MCP (Model Context Protocol) settings
   mcp:
@@ -147,3 +153,18 @@ development:
   save_raw_output: false
   # Pretty print JSON in logs
   pretty_json: true
+
+# Orchestration settings
+orchestration:
+  # Supervisor workspace directory (relative to project root)
+  supervisor_dir: ".cadence/supervisor"
+  # Agent workspace directory (relative to project root)
+  agent_dir: ".cadence/agent"
+  # Decision output format
+  decision_format: "json"
+  # Enable zen assistance in orchestration
+  enable_zen_assistance: true
+  # Maximum orchestration iterations before stopping
+  max_iterations: 100
+  # Orchestrated mode (required for new architecture)
+  mode: "orchestrated"

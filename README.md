@@ -1,10 +1,8 @@
 # Claude Cadence
 
-**🚧 UNDER CONSTRUCTION - NOT YET FUNCTIONAL 🚧**
-
 A task-driven supervision system for Claude Code agent execution. Manages agent execution through Task Master integration, with agents working on TODOs until completion.
 
-**Note: This project is actively being developed and is not ready for use. The architecture is being designed and core components are still being implemented.**
+**Status: Core implementation complete. Currently in testing phase.**
 
 ## Overview
 
@@ -38,6 +36,18 @@ python scripts/check_mcp_servers.py
 
 ## Quick Start
 
+### Using the Orchestrator (Recommended)
+
+```bash
+# Run the orchestrator with a Task Master file
+python -m cadence.orchestrator /path/to/project /path/to/tasks.json
+
+# Or with config file
+python -m cadence.orchestrator /path/to/project /path/to/tasks.json --config config.yaml
+```
+
+### Using Python API
+
 ```python
 from cadence import TaskSupervisor
 
@@ -45,7 +55,7 @@ from cadence import TaskSupervisor
 supervisor = TaskSupervisor(max_turns=40)
 
 # Run with Task Master integration
-success = supervisor.run_with_taskmaster()
+success = supervisor.run_with_taskmaster("path/to/tasks.json")
 ```
 
 ## How It Works

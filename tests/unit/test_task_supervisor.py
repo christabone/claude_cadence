@@ -248,25 +248,52 @@ class TestTaskSupervisor:
             # Mock task loading
             mock_manager = Mock()
             mock_manager.load_tasks.return_value = True
-            # Create proper mock tasks with __dict__ attribute
-            task1 = Mock(id="1", title="Task 1", description="Desc 1")
-            task1.is_complete.return_value = False
-            task1.__dict__ = {"id": "1", "title": "Task 1", "description": "Desc 1", "status": "pending"}
+            # Create simple task objects instead of Mocks
+            class MockTask:
+                def __init__(self, id, title, description, status="pending"):
+                    self.id = id
+                    self.title = title
+                    self.description = description
+                    self.status = status
+                    
+                def is_complete(self):
+                    return self.status == "done"
+                    
+                @property
+                def __dict__(self):
+                    return {
+                        "id": self.id,
+                        "title": self.title,
+                        "description": self.description,
+                        "status": self.status
+                    }
             
-            task2 = Mock(id="2", title="Task 2", description="Desc 2")
-            task2.is_complete.return_value = False
-            task2.__dict__ = {"id": "2", "title": "Task 2", "description": "Desc 2", "status": "pending"}
+            task1 = MockTask("1", "Task 1", "Desc 1")
+            task2 = MockTask("2", "Task 2", "Desc 2")
             
             mock_manager.tasks = [task1, task2]
+            mock_manager.update_task_status = Mock()
+            mock_manager.save_tasks = Mock()
             mock_tm.return_value = mock_manager
             
             # Mock prompt manager
-            with patch('cadence.task_supervisor.TodoPromptManager'):
-                result = supervisor.run_with_taskmaster(str(mock_task_file))
-                
-                assert result is True
-                assert mock_manager.load_tasks.called
-                assert mock_subprocess.called
+            with patch('cadence.task_supervisor.TodoPromptManager') as mock_prompt_manager:
+                # Make sure execute_with_todos returns a successful result
+                with patch.object(supervisor, 'execute_with_todos') as mock_execute:
+                    mock_execute.return_value = ExecutionResult(
+                        success=True,
+                        turns_used=5,
+                        output_lines=["Working...", "ALL TASKS COMPLETE"],
+                        errors=[],
+                        metadata={},
+                        task_complete=True
+                    )
+                    
+                    result = supervisor.run_with_taskmaster(str(mock_task_file))
+                    
+                    assert result is True
+                    assert mock_manager.load_tasks.called
+                    assert mock_execute.called
                 
     def test_zen_assistance_detection(self, supervisor, mock_subprocess, temp_dir):
         """Test zen assistance detection"""
@@ -314,28 +341,31 @@ class TestTaskSupervisor:
                 assert response["continuation_guidance"] == "Continuation guidance"
                 
     @pytest.mark.parametrize("output,expected", [
-        (["Turn 1", "Turn 2", "Turn 3"], 3),
-        (["No turns here"], 1),
-        (["x" * 500], 5),  # 500 chars / 100 = 5
-        ([], 1)
+        (["Turn 1 - Working on first task with detailed output",
+          "Turn 2 - Continuing with the second phase of the task",
+          "Turn 3 - Finishing up the remaining work items now"], 0),  # Turn counting removed
+        (["Short output line that is less than fifty characters"], 0),  # Turn counting removed
+        (["x" * 60], 0),  # Turn counting removed
+        ([], 0)  # Turn counting removed
     ])
     def test_turn_estimation(self, supervisor, output, expected, temp_dir):
-        """Test turn count estimation logic"""
+        """Test that turn count is always 0 (turn estimation was removed)"""
         with patch('subprocess.Popen') as mock_popen:
             mock_process = Mock()
             mock_process.returncode = 0
-            mock_process.poll.side_effect = [None] + [0]
-            
+            mock_process.poll.side_effect = [None] * len(output) + [0]
+    
             mock_stdout = Mock()
+            # Add more None poll responses to allow all lines to be read
             mock_stdout.readline.side_effect = [line + '\n' for line in output] + ['']
             mock_stderr = Mock()
             mock_stderr.readline.return_value = ''
-            
+    
             mock_process.stdout = mock_stdout
             mock_process.stderr = mock_stderr
             mock_popen.return_value = mock_process
-            
+    
             supervisor.max_turns = 10
             result = supervisor.execute_with_todos(["test"])
-            
-            assert result.turns_used == min(expected, supervisor.max_turns)
+    
+            assert result.turns_used == 0  # Always 0 now

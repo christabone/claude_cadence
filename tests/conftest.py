@@ -36,6 +36,7 @@ def mock_config(temp_dir):
     config.execution.timeout = 60
     config.agent.model = "test-model"
     config.agent.tools = ["bash", "read", "write"]
+    config.supervisor.model = "claude-3-opus-latest"  # Use AI model, not heuristic
     config.supervisor.verbose = False
     config.supervisor.zen_integration.enabled = False
     return config

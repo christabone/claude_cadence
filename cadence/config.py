@@ -38,6 +38,7 @@ class ExecutionConfig:
     timeout: int = 600
     save_logs: bool = True
     log_dir: str = ".cadence/logs"
+    subprocess_timeout: int = 300  # Timeout for subprocess calls in seconds
 
 
 

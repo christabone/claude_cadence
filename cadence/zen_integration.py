@@ -347,7 +347,7 @@ class ZenIntegration:
             context.get('scratchpad', 'Not available'),
             "",
             "=== RECENT ERRORS ===",
-            chr(10).join(context.get('errors', ['No errors captured'])),
+            '\n'.join(context.get('errors', ['No errors captured'])),
             "",
             "=== RECENT OUTPUT (last 200 lines) ===",
             context.get('recent_output', 'Not available')
