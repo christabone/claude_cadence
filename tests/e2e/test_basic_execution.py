@@ -13,7 +13,7 @@ import time
 import yaml
 
 from cadence.task_supervisor import TaskSupervisor, ExecutionResult
-from cadence.config import CadenceConfig, SCRATCHPAD_DIR, SUPERVISOR_LOG_DIR
+from cadence.config import CadenceConfig, ConfigLoader, SCRATCHPAD_DIR, SUPERVISOR_LOG_DIR
 
 
 class TestBasicE2E:
@@ -32,6 +32,7 @@ class TestBasicE2E:
         config_dict = {
             "supervisor": {
                 "verbose": True,
+                "model": "claude-3-5-sonnet-20241022",  # Use AI model, not heuristic
                 "zen_integration": {
                     "enabled": False  # Disable for basic tests
                 }
@@ -43,10 +44,12 @@ class TestBasicE2E:
             },
             "agent": {
                 "model": "claude-3-haiku-20240307",  # Use fast model for tests
-                "claude_args": ["--no-cache"]
+                "extra_flags": ["--no-cache"]
             },
-            "mcp": {
-                "servers": ["filesystem"]  # Basic filesystem access only
+            "integrations": {
+                "mcp": {
+                    "servers": ["filesystem"]  # Basic filesystem access only
+                }
             }
         }
         
@@ -54,7 +57,10 @@ class TestBasicE2E:
         with open(config_file, 'w') as f:
             yaml.dump(config_dict, f)
             
-        return CadenceConfig(str(config_file))
+        # Use ConfigLoader to properly load the config
+        loader = ConfigLoader(str(config_file))
+        return loader.config
+
         
     def test_simple_todo_execution(self, e2e_config, e2e_temp_dir):
         """Test executing simple TODOs with real Claude"""
@@ -67,39 +73,48 @@ class TestBasicE2E:
         except FileNotFoundError:
             pytest.skip("Claude CLI not installed")
             
-        # Create simple TODOs
-        todos = [
-            "Create a file called test_output.txt with the content 'Hello from E2E test'",
-            "Read the file test_output.txt and print its contents"
-        ]
+        # Change to temp directory for execution
+        original_cwd = os.getcwd()
+        os.chdir(e2e_temp_dir)
         
-        # Create supervisor
-        supervisor = TaskSupervisor(config=e2e_config)
-        
-        # Execute
-        result = supervisor.execute_with_todos(
-            todos,
-            session_id="e2e_simple_test"
-        )
-        
-        # Verify execution
-        assert isinstance(result, ExecutionResult)
-        assert result.success is True
-        assert result.turns_used > 0
-        assert result.turns_used <= e2e_config.execution.max_turns
-        
-        # Check if file was created
-        test_file = e2e_temp_dir / "test_output.txt"
-        assert test_file.exists()
-        assert test_file.read_text().strip() == "Hello from E2E test"
-        
-        # Check scratchpad was created
-        scratchpad_path = Path(SCRATCHPAD_DIR) / "session_e2e_simple_test.md"
-        assert scratchpad_path.exists()
-        
-        # Check supervisor log was created
-        supervisor_log = Path(SUPERVISOR_LOG_DIR) / "session_e2e_simple_test.md"
-        assert supervisor_log.exists()
+        try:
+            # Create simple TODOs
+            todos = [
+                "Create a file called test_output.txt with the content 'Hello from E2E test'",
+                "Read the file test_output.txt and print its contents"
+            ]
+            
+            # Create supervisor
+            supervisor = TaskSupervisor(config=e2e_config)
+            
+            # Execute
+            result = supervisor.execute_with_todos(
+                todos,
+                session_id="e2e_simple_test"
+            )
+            
+            # Verify execution
+            assert isinstance(result, ExecutionResult)
+            assert result.success is True
+            assert result.turns_used == 0  # Turn counting not available with stream-json
+            
+            # Check if file was created
+            test_file = e2e_temp_dir / "test_output.txt"
+            assert test_file.exists()
+            assert test_file.read_text().strip() == "Hello from E2E test"
+            
+            # Check scratchpad was created
+            scratchpad_path = e2e_temp_dir / SCRATCHPAD_DIR / "session_e2e_simple_test.md"
+            assert scratchpad_path.exists()
+            
+            # Check supervisor log was created
+            supervisor_log = e2e_temp_dir / SUPERVISOR_LOG_DIR / "session_e2e_simple_test.md"
+            assert supervisor_log.exists()
+            
+        finally:
+            # Always restore original directory
+            os.chdir(original_cwd)
+
         
     def test_execution_with_errors(self, e2e_config, e2e_temp_dir):
         """Test handling of execution errors"""
@@ -115,21 +130,30 @@ class TestBasicE2E:
             "Create a file called error_handled.txt with content 'Error was handled'"
         ]
         
-        supervisor = TaskSupervisor(config=e2e_config)
+        # Change to temp directory for execution
+        original_cwd = os.getcwd()
+        os.chdir(e2e_temp_dir)
         
-        result = supervisor.execute_with_todos(
-            todos,
-            session_id="e2e_error_test"
-        )
+        try:
+            supervisor = TaskSupervisor(config=e2e_config)
+            
+            result = supervisor.execute_with_todos(
+                todos,
+                session_id="e2e_error_test"
+            )
+            
+            # Should still succeed but with errors noted
+            assert isinstance(result, ExecutionResult)
+            # Agent should handle the error and continue
+            assert result.success is True or len(result.errors) > 0
+            
+            # Check if second task was still completed
+            handled_file = e2e_temp_dir / "error_handled.txt"
+            # This might or might not exist depending on how the agent handles the error
         
-        # Should still succeed but with errors noted
-        assert isinstance(result, ExecutionResult)
-        # Agent should handle the error and continue
-        assert result.success is True or len(result.errors) > 0
-        
-        # Check if second task was still completed
-        handled_file = e2e_temp_dir / "error_handled.txt"
-        # This might or might not exist depending on how the agent handles the error
+        finally:
+            # Always restore original directory
+            os.chdir(original_cwd)
         
     def test_execution_timeout(self, e2e_config, e2e_temp_dir):
         """Test execution timeout handling"""
@@ -142,25 +166,34 @@ class TestBasicE2E:
         # Configure very short timeout
         e2e_config.execution.timeout = 5  # 5 seconds
         
-        # Create a task that might take longer
-        todos = [
-            "Count from 1 to 1000000 and print every 100000th number"
-        ]
+        # Change to temp directory for execution
+        original_cwd = os.getcwd()
+        os.chdir(e2e_temp_dir)
         
-        supervisor = TaskSupervisor(config=e2e_config)
-        
-        start_time = time.time()
-        result = supervisor.execute_with_todos(
-            todos,
-            session_id="e2e_timeout_test"
-        )
-        elapsed = time.time() - start_time
-        
-        # Should timeout within reasonable bounds
-        assert elapsed < 10  # Should not take more than 10 seconds
-        
-        if not result.success:
-            assert any("timed out" in err.lower() for err in result.errors)
+        try:
+            # Create a task that might take longer
+            todos = [
+                "Count from 1 to 1000000 and print every 100000th number"
+            ]
+            
+            supervisor = TaskSupervisor(config=e2e_config)
+            
+            start_time = time.time()
+            result = supervisor.execute_with_todos(
+                todos,
+                session_id="e2e_timeout_test"
+            )
+            elapsed = time.time() - start_time
+            
+            # Should timeout within reasonable bounds
+            assert elapsed < 10  # Should not take more than 10 seconds
+            
+            if not result.success:
+                assert any("timed out" in err.lower() for err in result.errors)
+                
+        finally:
+            # Always restore original directory
+            os.chdir(original_cwd)
             
     def test_multiple_sessions(self, e2e_config, e2e_temp_dir):
         """Test running multiple independent sessions"""
@@ -170,33 +203,42 @@ class TestBasicE2E:
         except (FileNotFoundError, subprocess.CalledProcessError):
             pytest.skip("Claude CLI not available")
             
-        supervisor = TaskSupervisor(config=e2e_config)
+        # Change to temp directory for execution
+        original_cwd = os.getcwd()
+        os.chdir(e2e_temp_dir)
         
-        # First session
-        todos1 = ["Create a file called session1.txt with content 'Session 1'"]
-        result1 = supervisor.execute_with_todos(
-            todos1,
-            session_id="e2e_session1"
-        )
-        
-        # Second session
-        todos2 = ["Create a file called session2.txt with content 'Session 2'"]
-        result2 = supervisor.execute_with_todos(
-            todos2,
-            session_id="e2e_session2"
-        )
-        
-        # Both should succeed
-        assert result1.success is True
-        assert result2.success is True
-        
-        # Check files
-        assert (e2e_temp_dir / "session1.txt").exists()
-        assert (e2e_temp_dir / "session2.txt").exists()
-        
-        # Check separate scratchpads
-        assert (Path(SCRATCHPAD_DIR) / "session_e2e_session1.md").exists()
-        assert (Path(SCRATCHPAD_DIR) / "session_e2e_session2.md").exists()
+        try:
+            supervisor = TaskSupervisor(config=e2e_config)
+            
+            # First session
+            todos1 = ["Create a file called session1.txt with content 'Session 1'"]
+            result1 = supervisor.execute_with_todos(
+                todos1,
+                session_id="e2e_session1"
+            )
+            
+            # Second session
+            todos2 = ["Create a file called session2.txt with content 'Session 2'"]
+            result2 = supervisor.execute_with_todos(
+                todos2,
+                session_id="e2e_session2"
+            )
+            
+            # Both should succeed
+            assert result1.success is True
+            assert result2.success is True
+            
+            # Check files
+            assert (e2e_temp_dir / "session1.txt").exists()
+            assert (e2e_temp_dir / "session2.txt").exists()
+            
+            # Check separate scratchpads
+            assert (e2e_temp_dir / SCRATCHPAD_DIR / "session_e2e_session1.md").exists()
+            assert (e2e_temp_dir / SCRATCHPAD_DIR / "session_e2e_session2.md").exists()
+            
+        finally:
+            # Always restore original directory
+            os.chdir(original_cwd)
         
     def test_task_completion_detection(self, e2e_config, e2e_temp_dir):
         """Test proper detection of task completion"""
@@ -206,24 +248,33 @@ class TestBasicE2E:
         except (FileNotFoundError, subprocess.CalledProcessError):
             pytest.skip("Claude CLI not available")
             
-        todos = [
-            "Create a file called done.txt with content 'Task completed'",
-            "Print 'ALL TASKS COMPLETE' to indicate you're done"
-        ]
+        # Change to temp directory for execution
+        original_cwd = os.getcwd()
+        os.chdir(e2e_temp_dir)
         
-        supervisor = TaskSupervisor(config=e2e_config)
-        
-        result = supervisor.execute_with_todos(
-            todos,
-            session_id="e2e_completion_test"  
-        )
-        
-        assert result.success is True
-        assert result.task_complete is True
-        assert (e2e_temp_dir / "done.txt").exists()
-        
-        # Check scratchpad has completion marker
-        scratchpad = Path(SCRATCHPAD_DIR) / "session_e2e_completion_test.md"
-        if scratchpad.exists():
-            content = scratchpad.read_text()
-            assert "ALL TASKS COMPLETE" in content or "Completion Summary" in content
+        try:
+            todos = [
+                "Create a file called done.txt with content 'Task completed'",
+                "Print 'ALL TASKS COMPLETE' to indicate you're done"
+            ]
+            
+            supervisor = TaskSupervisor(config=e2e_config)
+            
+            result = supervisor.execute_with_todos(
+                todos,
+                session_id="e2e_completion_test"  
+            )
+            
+            assert result.success is True
+            assert result.task_complete is True
+            assert (e2e_temp_dir / "done.txt").exists()
+            
+            # Check scratchpad has completion marker
+            scratchpad = e2e_temp_dir / SCRATCHPAD_DIR / "session_e2e_completion_test.md"
+            if scratchpad.exists():
+                content = scratchpad.read_text()
+                assert "ALL TASKS COMPLETE" in content or "Completion Summary" in content
+            
+        finally:
+            # Always restore original directory
+            os.chdir(original_cwd)

@@ -36,9 +36,9 @@ class ExecutionResult:
     metadata: Dict[str, Any]
     task_complete: bool
     # New fields for completion detection
-    completed_normally: bool = False  # Agent said AgentPromptDefaults.COMPLETION_SIGNAL
+    completed_normally: bool = False  # Agent said "ALL TASKS COMPLETE"
     stopped_unexpectedly: bool = False  # Stopped without completion signal
-    requested_help: bool = False  # Agent said AgentPromptDefaults.HELP_SIGNAL
+    requested_help: bool = False  # Agent said "HELP NEEDED"
 
 
 
@@ -152,8 +152,8 @@ class TaskSupervisor:
                 content = f.read()
                 
             # Check for key indicators
-            has_help_needed = AgentPromptDefaults.HELP_SIGNAL.upper() in content.upper() and "STATUS: STUCK" in content.upper()
-            has_all_complete = AgentPromptDefaults.COMPLETION_SIGNAL.upper() in content.upper()
+            has_help_needed = "HELP NEEDED" in content and "Status: STUCK" in content
+            has_all_complete = "ALL TASKS COMPLETE" in content
             
             # Extract last few lines for context
             lines = content.strip().split('\n')
@@ -183,22 +183,30 @@ class TaskSupervisor:
         log_path = self.supervisor_log_dir / f"session_{session_id}.md"
         self.current_log_path = log_path
         
+        # Check if zen_integration is a dict or object
+        if isinstance(self.config.supervisor.zen_integration, dict):
+            zen_enabled = self.config.supervisor.zen_integration.get('enabled', False)
+        else:
+            zen_enabled = self.config.supervisor.zen_integration.enabled
+        
         with open(log_path, 'w') as f:
             f.write(f"""# Supervisor Log
-Session ID: {session_id}
-Started: {datetime.now().isoformat()}
-Max Turns: {self.max_turns}
-Model: {self.model}
-
-## Configuration
-- Zen Integration: {'Enabled' if self.config.supervisor.zen_integration.enabled else 'Disabled'}
-- Verbose: {self.verbose}
-- Timeout: {self.timeout}s
-
-## Execution Timeline
-""")
+    Session ID: {session_id}
+    Started: {datetime.now().isoformat()}
+    Max Turns: {self.max_turns}
+    Model: {self.model}
+    
+    ## Configuration
+    - Zen Integration: {'Enabled' if zen_enabled else 'Disabled'}
+    - Verbose: {self.verbose}
+    - Timeout: {self.timeout}s
+    
+    ## Execution Timeline
+    """)
         
         return log_path
+
+
         
     def _log_supervisor(self, message: str, level: str = "INFO"):
         """Add entry to supervisor log (both Python and markdown)"""
@@ -324,28 +332,662 @@ Model: {self.model}
             f.write(f"{analysis}\n")
             
     def _log_final_summary(self, all_results: List[ExecutionResult]):
-            """Log final execution summary"""
-            total_turns = sum(r.turns_used for r in all_results)
-            total_time = sum(r.metadata.get('execution_time', 0) for r in all_results)
-            any_complete = any(r.task_complete for r in all_results)
+        """Log final execution summary"""
+        total_turns = sum(r.turns_used for r in all_results)
+        total_time = sum(r.metadata.get('execution_time', 0) for r in all_results)
+        any_complete = any(r.task_complete for r in all_results)
+        
+        # Python logging
+        self.logger.info("="*60)
+        self.logger.info("FINAL EXECUTION SUMMARY")
+        self.logger.info(f"Total executions: {len(all_results)}")
+        self.logger.info(f"Total turns used: {total_turns}")
+        self.logger.info(f"Total time: {total_time:.2f}s")
+        self.logger.info(f"Final status: {'✅ Complete' if any_complete else '❌ Incomplete'}")
+        self.logger.info("="*60)
+        
+        # Markdown logging
+        if not self.current_log_path:
+            return
             
-            # Python logging
-            self.logger.info("="*60)
-            self.logger.info("FINAL EXECUTION SUMMARY")
-            self.logger.info(f"Total executions: {len(all_results)}")
-            self.logger.info(f"Total turns used: {total_turns}")
-            self.logger.info(f"Total time: {total_time:.2f}s")
-            self.logger.info(f"Final status: {'✅ Complete' if any_complete else '❌ Incomplete'}")
-            self.logger.info("="*60)
+        with open(self.current_log_path, 'a') as f:
+            f.write(f"\n## Final Summary\n")
+            f.write(f"- Total Executions: {len(all_results)}\n")
+            f.write(f"- Total Turns Used: {total_turns}\n")
+            f.write(f"- Total Time: {total_time:.2f}s\n")
+            f.write(f"- Final Status: {'✅ Complete' if any_complete else '❌ Incomplete'}\n")
+            f.write(f"- Completed: {datetime.now().isoformat()}\n")
+        
+    def execute_with_todos(self, todos: List[str], task_list: Optional[List[Dict]] = None, 
+                          continuation_context: Optional[str] = None, session_id: Optional[str] = None) -> ExecutionResult:
+        """
+        Execute agent with a list of TODOs
+        
+        Args:
+            todos: List of TODO items for the agent to complete
+            task_list: Optional list of tasks from Task Master for tracking
+            continuation_context: Optional context from previous execution
             
-            # Markdown logging
-            if not self.current_log_path:
-                return
+        Returns:
+            ExecutionResult with execution details
+        """
+        # Create output log file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = self.output_dir / f"execution_{timestamp}.log"
+        
+        # Generate session ID if not provided
+        if session_id is None:
+            session_id = generate_session_id()
+            
+        # Initialize supervisor log for this session
+        self._init_supervisor_log(session_id)
+        self._log_supervisor(f"Starting execution with {len(todos)} TODOs")
+        
+        # Extract task numbers from task_list if available
+        task_numbers = ""
+        if task_list:
+            task_ids = [str(task.get('id', '?')) for task in task_list if not task.get('status') == 'done']
+            task_numbers = ", ".join(task_ids)
+        
+        # Create new prompt manager for this execution
+        self.prompt_manager = TodoPromptManager(todos, self.max_turns)
+        self.prompt_manager.session_id = session_id
+        self.prompt_manager.task_numbers = task_numbers
+            
+        # Log task analysis
+        self._log_task_analysis(todos, task_list)
+        
+        # Build prompt with TODOs
+        prompt = self._build_todo_prompt(todos, continuation_context)
+        
+        # Build claude command
+        cmd = ["claude"]
+        
+        if continuation_context:
+            cmd.extend(["-c", "-p", prompt])
+        else:
+            cmd.extend(["-p", prompt])
+            
+        cmd.extend([
+            "--model", self.model,
+            "--max-turns", str(self.max_turns),
+            "--output-format=stream-json"
+        ])
+        
+        # Add tool flags from config
+        for tool in self.allowed_tools:
+            cmd.extend(["--tool", tool])
+            
+        # Add extra flags from config
+        if self.config.agent.extra_flags:
+            cmd.extend(self.config.agent.extra_flags)
+        
+        if self.verbose:
+            self.logger.info(f"Starting task execution with max {self.max_turns} turns...")
+            self.logger.info(f"TODOs: {len(todos)} items")
+            
+        # Log execution start
+        self._log_execution_start(cmd, continuation=bool(continuation_context))
+            
+        # Track execution details
+        start_time = time.time()
+        output_lines = []
+        errors = []
+        turns_used = 0
+        
+        try:
+            # Run the agent with Popen for stream processing
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            # Open log file
+            with open(log_file, 'w') as log:
+                log.write(f"Command: {' '.join(cmd)}\n")
+                log.write("=== STDOUT ===\n")
                 
-            with open(self.current_log_path, 'a') as f:
-                f.write("\n## Final Summary\n")
-                f.write(f"- Total Executions: {len(all_results)}\n")
-                f.write(f"- Total Turns Used: {total_turns}\n")
-                f.write(f"- Total Time: {total_time:.2f}s\n")
-                f.write(f"- Final Status: {'✅ Complete' if any_complete else '❌ Incomplete'}\n")
-                f.write(f"- Completed: {datetime.now().isoformat()}\n")
+                # Process stdout stream
+                stdout_lines = []
+                stderr_lines = []
+                
+                try:
+                    # Read stdout line by line with timeout using thread
+                    start_time = time.time()
+                    
+                    # Create queue for thread-safe line reading
+                    stdout_queue = queue.Queue()
+                    stderr_queue = queue.Queue()
+                    
+                    # Thread function to read stdout
+                    def enqueue_output(out, queue):
+                        for line in iter(out.readline, ''):
+                            queue.put(line)
+                        out.close()
+                    
+                    # Start threads for reading stdout and stderr
+                    stdout_thread = threading.Thread(target=enqueue_output, args=(process.stdout, stdout_queue))
+                    stderr_thread = threading.Thread(target=enqueue_output, args=(process.stderr, stderr_queue))
+                    stdout_thread.daemon = True
+                    stderr_thread.daemon = True
+                    stdout_thread.start()
+                    stderr_thread.start()
+                    
+                    # Main reading loop
+                    last_status_check = time.time()
+                    status_check_interval = SupervisorDefaults.STATUS_CHECK_INTERVAL
+                    
+                    while True:
+                        # Check timeout
+                        if time.time() - start_time > self.timeout:
+                            self.logger.error(f"Timeout reached after {self.timeout}s")
+                            process.terminate()
+                            raise subprocess.TimeoutExpired(cmd, self.timeout)
+                            
+                        # Periodic status check
+                        if time.time() - last_status_check > status_check_interval:
+                            elapsed = time.time() - start_time
+                            self.logger.debug(f"Execution in progress: {elapsed:.1f}s elapsed")
+                            last_status_check = time.time()
+                            
+                        # Try to read from stdout queue
+                        try:
+                            line = stdout_queue.get_nowait()
+                        except queue.Empty:
+                            # No new stdout line, check stderr
+                            try:
+                                err_line = stderr_queue.get_nowait()
+                                stderr_lines.append(err_line.rstrip())
+                                if err_line.strip():
+                                    self.logger.debug(f"STDERR: {err_line.rstrip()}")
+                            except queue.Empty:
+                                # Check if process is done
+                                if process.poll() is not None:
+                                    break
+                                time.sleep(0.05)  # Small sleep to prevent busy-waiting
+                                continue
+                        else:
+                            # Process the stdout line
+                            stdout_lines.append(line.rstrip())
+                            log.write(line)
+                            
+                            # Try to parse JSON stream output
+                            if line.strip().startswith('{'):
+                                try:
+                                    data = json.loads(line.strip())
+                                    # Extract content from JSON stream
+                                    if 'content' in data:
+                                        output_lines.append(data['content'])
+                                    # Note: We can't track turns in real-time with Claude CLI
+                                except json.JSONDecodeError:
+                                    # Not JSON, treat as regular output
+                                    output_lines.append(line.rstrip())
+                            else:
+                                output_lines.append(line.rstrip())
+                    
+                    # Wait for threads to finish and get any remaining output
+                    stdout_thread.join(timeout=5)
+                    stderr_thread.join(timeout=5)
+                    
+                    # Drain any remaining items from queues
+                    while not stdout_queue.empty():
+                        line = stdout_queue.get_nowait()
+                        stdout_lines.append(line.rstrip())
+                        output_lines.append(line.rstrip())
+                        log.write(line)
+                        
+                    while not stderr_queue.empty():
+                        err_line = stderr_queue.get_nowait()
+                        stderr_lines.append(err_line.rstrip())
+                        
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    raise
+                    
+                # Write stderr to log
+                log.write("\n=== STDERR ===\n")
+                for line in stderr_lines:
+                    log.write(line + '\n')
+                    
+                log.write(f"\nExit code: {process.returncode}\n")
+                
+            # Process any errors
+            if stderr_lines:
+                errors.extend(stderr_lines)
+                
+            # Turn counting is not possible with Claude CLI stream-json format
+            # We'll detect completion state from output patterns instead
+                    
+            success = process.returncode == 0
+            
+        except subprocess.TimeoutExpired:
+            success = False
+            errors.append(f"Agent execution timed out after {self.timeout} seconds")
+            self.logger.error(f"Execution timeout after {self.timeout}s")
+            
+        except Exception as e:
+            success = False
+            errors.append(f"Unexpected error: {str(e)}")
+            self.logger.exception("Unexpected error during agent execution")
+            
+        # Calculate execution time
+        execution_time = time.time() - start_time
+        
+        # Analyze if tasks are complete
+        output_text = "\n".join(output_lines)
+        task_complete = self._analyze_task_completion(output_text, task_list)
+        
+        metadata = {
+            "execution_time": execution_time,
+            "log_file": str(log_file),
+            "timestamp": timestamp,
+            "model": self.model,
+            "todos_count": len(todos),
+            "session_id": session_id,
+            "scratchpad_path": f".cadence/scratchpad/session_{session_id}.md"
+        }
+        
+        # Detect completion patterns
+        completed_normally = "ALL TASKS COMPLETE" in output_text
+        requested_help = "HELP NEEDED" in output_text
+        stopped_unexpectedly = not completed_normally and not requested_help and success
+        
+        result = ExecutionResult(
+            success=success,
+            turns_used=0,  # Turn counting not possible
+            output_lines=output_lines,
+            errors=errors,
+            metadata=metadata,
+            task_complete=task_complete,
+            completed_normally=completed_normally,
+            stopped_unexpectedly=stopped_unexpectedly,
+            requested_help=requested_help
+        )
+        
+        # Log execution result
+        self._log_execution_result(result)
+        
+        # Check scratchpad status
+        scratchpad_status = self._check_scratchpad_status(session_id)
+        if scratchpad_status.get("exists"):
+            self._log_supervisor(f"Scratchpad status: help_needed={scratchpad_status.get('has_help_needed')}, complete={scratchpad_status.get('has_all_complete')}")
+            if scratchpad_status.get('has_help_needed'):
+                self._log_supervisor("Agent has requested HELP - marking as stuck", "WARNING")
+        
+        # Check if zen assistance is needed
+        zen_check = self.zen.should_call_zen(result, self.prompt_manager.context, session_id)
+        if zen_check:
+            tool, reason = zen_check
+            if self.verbose:
+                self.logger.info(f"Zen assistance needed: {tool} - {reason}")
+            
+            # Log zen recommendation
+            self._log_zen_recommendation(tool, reason)
+            
+            # Store zen recommendation in metadata
+            result.metadata['zen_needed'] = {
+                'tool': tool,
+                'reason': reason
+            }
+        
+        return result
+        
+    def _build_todo_prompt(self, todos: List[str], continuation_context: Optional[str] = None) -> str:
+        """Build prompt with TODO list for agent"""
+        
+        # Use prompt manager if available
+        if hasattr(self, 'prompt_manager'):
+            if continuation_context:
+                # Create supervisor analysis dict
+                supervisor_analysis = {
+                    'session_id': self.prompt_manager.session_id,
+                    'previous_session_id': getattr(self, 'previous_session_id', 'unknown')
+                }
+                return self.prompt_manager.get_continuation_prompt(
+                    analysis_guidance="Continue where you left off. Focus on completing the remaining TODOs.",
+                    continuation_context=continuation_context,
+                    supervisor_analysis=supervisor_analysis
+                )
+            else:
+                return self.prompt_manager.get_initial_prompt()
+        
+        # Fallback to PromptBuilder
+        return PromptBuilder.build_agent_prompt(
+            todos=todos,
+            guidance="",
+            max_turns=self.max_turns,
+            continuation_context=continuation_context
+        )
+
+        
+    def _analyze_task_completion(self, output: str, task_list: Optional[List[Dict]]) -> bool:
+        """Analyze if tasks are complete"""
+        
+        # Check for explicit completion declaration
+        if "all tasks complete" in output.lower():
+            return True
+            
+        # Use task manager if available
+        if task_list:
+            try:
+                task_manager = TaskManager()
+                task_manager.tasks = [Task.from_dict(t) for t in task_list]
+                progress = task_manager.analyze_progress(output)
+                completed = progress.get('completed', [])
+                incomplete = progress.get('incomplete', [])
+                
+                # All complete if no incomplete tasks
+                return len(completed) > 0 and len(incomplete) == 0
+                
+            except Exception as e:
+                if self.verbose:
+                    self.logger.warning(f"Task analysis failed: {e}")
+                    
+        return False
+    def _cleanup_session(self, session_id: str):
+        """Clean up resources for a completed session."""
+        self.zen.cleanup_session(session_id)
+        self.logger.info(f"Cleaned up session {session_id}")
+        
+    def run_with_taskmaster(self, task_file: Optional[str] = None) -> bool:
+        """
+        Run supervisor with Task Master integration
+        
+        Args:
+            task_file: Path to Task Master tasks.json file (default: .taskmaster/tasks/tasks.json)
+            
+        Returns:
+            bool: True if all tasks completed successfully
+        """
+        # Default to .taskmaster/tasks/tasks.json if not specified
+        if task_file is None:
+            # Get project root from current working directory
+            project_root = Path.cwd()
+            task_file = str(project_root / ".taskmaster" / "tasks" / "tasks.json")
+        
+        try:
+            task_manager = TaskManager()
+            if not task_manager.load_tasks(task_file):
+                self.logger.error(f"Failed to load tasks from {task_file}")
+                return False
+                
+            self.logger.info(f"Loaded {len(task_manager.tasks)} tasks from Task Master")
+            
+            # Convert tasks to TODOs
+            todos = []
+            for task in task_manager.tasks:
+                if not task.is_complete():
+                    todo = f"Task {task.id}: {task.title}"
+                    if task.description:
+                        todo += f" - {task.description}"
+                    todos.append(todo)
+                    
+            if not todos:
+                self.logger.info("All tasks are already complete!")
+                return True
+                
+            self.logger.info(f"{len(todos)} tasks to complete")
+            
+            # Prompt manager will be created in execute_with_todos
+            
+            # Generate session ID for this execution
+            session_id = generate_session_id()
+            
+            try:
+                # Execute with TODOs
+                result = self.execute_with_todos(
+                    todos=todos,
+                    task_list=[t.__dict__ for t in task_manager.tasks],
+                    session_id=session_id
+                )
+                
+                # Save execution history
+                self.execution_history.append(result)
+                
+                # Print summary
+                if self.verbose:
+                    self.logger.info("Execution Summary:")
+                    self.logger.info(f"   - Success: {result.success}")
+                    self.logger.info(f"   - Turns used: {result.turns_used}/{self.max_turns}")
+                    self.logger.info(f"   - Tasks complete: {result.task_complete}")
+                    if result.errors:
+                        self.logger.info(f"   - Errors: {len(result.errors)}")
+                        
+                # Update task status if configured
+                if self.config.integrations["taskmaster"]["auto_update_status"] and result.task_complete:
+                    # Update all tasks to complete
+                    for task in task_manager.tasks:
+                        task_manager.update_task_status(task.id, "done")
+                    task_manager.save_tasks(task_file)
+                    self.logger.info("Updated task status in Task Master")
+                    self._log_supervisor("All tasks marked as complete in Task Master")
+                    
+                # Log final summary
+                self._log_final_summary(self.execution_history)
+                
+                # Log supervisor log location
+                if self.current_log_path and self.verbose:
+                    self.logger.info(f"Supervisor log: {self.current_log_path}")
+                    
+                return result.task_complete
+                
+            finally:
+                # Always cleanup session data
+                self._cleanup_session(session_id)
+                
+        except Exception as e:
+            self.logger.error(f"Error running with Task Master: {e}")
+            return False
+
+
+            
+    def handle_zen_assistance(self, execution_result: ExecutionResult, 
+                            session_id: str) -> Dict[str, Any]:
+        """
+        Handle zen assistance request from execution result
+        
+        Args:
+            execution_result: The execution result with zen_needed metadata
+            session_id: Current session ID
+            
+        Returns:
+            Dict with zen response and continuation guidance
+        """
+        zen_needed = execution_result.metadata.get('zen_needed')
+        if not zen_needed:
+            return {}
+            
+        tool = zen_needed['tool']
+        reason = zen_needed['reason']
+        
+        # Call zen for assistance
+        zen_response = self.zen.call_zen_support(
+            tool=tool,
+            reason=reason,
+            execution_result=execution_result,
+            context=self.prompt_manager.context,
+            session_id=session_id
+        )
+        
+        # Generate continuation guidance
+        continuation_guidance = self.zen.generate_continuation_guidance(zen_response)
+        
+        # Log zen assistance details
+        self._log_supervisor(f"Zen {tool} assistance provided", "ZEN")
+        if 'guidance' in zen_response:
+            self._log_supervisor_analysis(f"### Zen {tool.upper()} Guidance\n{zen_response['guidance']}")
+        
+        return {
+            'zen_response': zen_response,
+            'continuation_guidance': continuation_guidance,
+            'zen_tool_used': tool,
+            'zen_reason': reason
+        }
+    
+
+    
+    def get_next_task_with_subtasks(self, task_manager: TaskManager) -> Optional[Task]:
+        """Get next task that has incomplete subtasks"""
+        for task in task_manager.tasks:
+            # Check if task has subtasks
+            if hasattr(task, 'subtasks') and task.subtasks:
+                # Check if any subtasks are incomplete
+                incomplete_subtasks = [st for st in task.subtasks if st.status != 'done']
+                if incomplete_subtasks:
+                    self.logger.debug(f"Found task {task.id} with {len(incomplete_subtasks)} incomplete subtasks")
+                    return task
+        return None
+    
+    def extract_subtask_todos(self, task: Task) -> List[str]:
+        """Extract incomplete subtasks as TODOs for agent"""
+        todos = []
+        
+        for subtask in task.subtasks:
+            if subtask.status != 'done':
+                # Format subtask as TODO
+                todo = f"Task {subtask.id}: {subtask.title}"
+                
+                # Add description if available
+                if hasattr(subtask, 'description') and subtask.description:
+                    todo += f"\nDescription: {subtask.description}"
+                
+                # Add implementation details if available
+                if hasattr(subtask, 'details') and subtask.details:
+                    todo += f"\nDetails: {subtask.details}"
+                    
+                # Add test strategy if available
+                if hasattr(subtask, 'testStrategy') and subtask.testStrategy:
+                    todo += f"\nTest Strategy: {subtask.testStrategy}"
+                    
+                todos.append(todo)
+                self.logger.debug(f"Added TODO for subtask {subtask.id}")
+        
+        return todos
+    
+    def load_previous_results(self, session_id: str) -> Optional[Dict]:
+        """Load previous agent results for continuation"""
+        # Look for agent result file in supervisor directory
+        result_file = Path(".") / f"agent_result_{session_id}.json"
+        
+        try:
+            with open(result_file) as f:
+                return json.load(f)
+        except FileNotFoundError:
+            self.logger.warning(f"No previous results found for session {session_id}")
+            return None
+    
+    def supervisor_ai_analysis(self, current_task: Task, todos: List[str], 
+                              previous_results: Optional[Dict], session_id: str) -> Dict:
+        """Use AI model to analyze situation and provide guidance"""
+        
+        self.logger.info(f"Performing AI analysis for task {current_task.id}")
+        
+        # Ensure we're using AI model, not heuristic
+        if self.config.supervisor.model == "heuristic":
+            raise ValueError("Supervisor MUST use AI model, not heuristic mode!")
+        
+        # Build context for AI
+        context = self._build_supervisor_context(current_task, todos, previous_results)
+        
+        # Add analysis prompt
+        analysis_prompt = PromptBuilder.build_supervisor_analysis_prompt(
+            context=context,
+            include_json_format=True
+        )
+        
+        try:
+            # Call the supervisor AI model
+            import subprocess
+            import json
+            
+            cmd = [
+                "claude",
+                "-p", analysis_prompt,
+                "--model", self.config.supervisor.model,
+                "--output-format", "json",
+                "--max-turns", "1"
+            ]
+            
+            self.logger.debug(f"Calling AI model: {self.config.supervisor.model}")
+            try:
+                result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True,
+                    timeout=self.config.execution.subprocess_timeout
+                )
+            except subprocess.TimeoutExpired as e:
+                self.logger.error(f"AI model call timed out after {e.timeout}s")
+                return self._get_default_analysis(current_task, todos, previous_results)
+            
+            if result.returncode == 0 and result.stdout:
+                # Parse AI response
+                try:
+                    ai_response = json.loads(result.stdout)
+                    analysis = {
+                        'should_execute': ai_response.get('should_execute', True),
+                        'guidance': ai_response.get('guidance', f"Complete the {len(todos)} subtasks for task {current_task.id}."),
+                        'reasoning': ai_response.get('reasoning', f"Task {current_task.id} has {len(todos)} incomplete subtasks."),
+                        'needs_assistance': ai_response.get('needs_assistance', False)
+                    }
+                    self.logger.info("Successfully got AI analysis")
+                except json.JSONDecodeError:
+                    self.logger.error("Failed to parse AI response as JSON, using defaults")
+                    analysis = self._get_default_analysis(current_task, todos, previous_results)
+            else:
+                self.logger.error(f"AI model call failed: {result.stderr}")
+                analysis = self._get_default_analysis(current_task, todos, previous_results)
+                
+        except Exception as e:
+            self.logger.error(f"Error calling AI model: {e}")
+            analysis = self._get_default_analysis(current_task, todos, previous_results)
+        
+        # Check if previous execution had issues
+        if previous_results and not previous_results.get('success'):
+            analysis['needs_assistance'] = True
+            analysis['guidance'] += "\n\nNote: Previous execution encountered errors. Review the error messages and adjust your approach accordingly."
+        
+        return analysis
+    
+    def _get_default_analysis(self, current_task: Task, todos: List[str], 
+                             previous_results: Optional[Dict]) -> Dict:
+        """Get default analysis when AI call fails"""
+        return {
+            'should_execute': True,
+            'guidance': f"Focus on completing the {len(todos)} subtasks for task {current_task.id}. Work systematically and ensure each subtask is fully complete before moving to the next.",
+            'reasoning': f"Task {current_task.id} has {len(todos)} incomplete subtasks that need attention.",
+            'needs_assistance': bool(previous_results and not previous_results.get('success'))
+        }
+    
+    def _build_supervisor_context(self, current_task: Task, todos: List[str], 
+                                 previous_results: Optional[Dict]) -> str:
+        """Build context for supervisor AI analysis"""
+        completed_subtasks = len([st for st in current_task.subtasks if st.status == 'done'])
+        total_subtasks = len(current_task.subtasks)
+        
+        context = PromptBuilder.build_task_context(
+            task_id=current_task.id,
+            title=current_task.title,
+            completed_subtasks=completed_subtasks,
+            total_subtasks=total_subtasks,
+            todos=todos
+        )
+        
+        if previous_results:
+            context += PromptBuilder.format_execution_results(
+                success=previous_results.get('success'),
+                execution_time=previous_results.get('execution_time', 0),
+                completed_normally=previous_results.get('completed_normally'),
+                requested_help=previous_results.get('requested_help'),
+                error_count=len(previous_results.get('errors', []))
+            )
+        
+        return context
+
+    
+    def get_zen_assistance_for_analysis(self, analysis: Dict) -> str:
+        """Get zen assistance for analysis mode"""
+        # Placeholder for zen integration
+        return "Consider breaking down complex subtasks further if the agent struggles."

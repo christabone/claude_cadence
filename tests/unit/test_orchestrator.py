@@ -121,7 +121,8 @@ class TestSupervisorOrchestrator:
             
             # Verify command
             args = mock_run.call_args[0][0]
-            assert "python" in args[0]
+            assert args[0] == "python3"
+            assert args[1].endswith("supervisor_cli.py")
             assert "--analyze" in args
             assert "--continue" not in args
             

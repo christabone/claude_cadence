@@ -1,0 +1,12 @@
+{
+  "action": "execute",
+  "todos": [
+    "Task 1.2: Subtask 1.2\nDescription: Need to implement this\nDetails: Implementation details here\nTest Strategy: Unit test the function",
+    "Task 1.3: Subtask 1.3\nDescription: Another pending task\nDetails: <Mock name='mock.details' id='130760900595152'>\nTest Strategy: <Mock name='mock.testStrategy' id='130760900594672'>"
+  ],
+  "guidance": "Test guidance",
+  "task_id": "1",
+  "session_id": "test_session",
+  "reason": "Test reasoning",
+  "zen_needed": null
+}

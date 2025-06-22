@@ -12,7 +12,7 @@ import yaml
 from unittest.mock import patch, Mock
 
 from cadence.task_supervisor import TaskSupervisor, ExecutionResult
-from cadence.config import CadenceConfig, ZenIntegrationConfig, SCRATCHPAD_DIR
+from cadence.config import CadenceConfig, ZenIntegrationConfig, SCRATCHPAD_DIR, ConfigLoader
 from cadence.zen_integration import ZenIntegration
 
 
@@ -59,7 +59,8 @@ class TestZenIntegrationE2E:
         with open(config_file, 'w') as f:
             yaml.dump(config_dict, f)
             
-        return CadenceConfig(str(config_file))
+        loader = ConfigLoader(str(config_file))
+        return loader.config
         
     def test_stuck_agent_triggers_zen(self, e2e_config_with_zen, e2e_temp_dir):
         """Test that a stuck agent triggers Zen assistance"""

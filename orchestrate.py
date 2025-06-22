@@ -38,8 +38,8 @@ def main():
     parser.add_argument(
         "--task-file",
         type=str,
-        required=True,
-        help="Path to Task Master tasks.json file"
+        default=None,
+        help="Path to Task Master tasks.json file (default: .taskmaster/tasks/tasks.json)"
     )
     
     parser.add_argument(
@@ -83,11 +83,16 @@ def main():
     
     # Resolve paths
     project_root = Path(args.project_root).resolve()
-    task_file = Path(args.task_file)
     
-    # Make task file absolute if relative
-    if not task_file.is_absolute():
-        task_file = project_root / task_file
+    # Handle task file - use default if not specified
+    if args.task_file:
+        task_file = Path(args.task_file)
+        # Make task file absolute if relative
+        if not task_file.is_absolute():
+            task_file = project_root / task_file
+    else:
+        # Use default location
+        task_file = project_root / ".taskmaster" / "tasks" / "tasks.json"
     
     # Validate paths
     if not project_root.exists():
@@ -96,6 +101,7 @@ def main():
         
     if not task_file.exists():
         logger.error(f"Task file does not exist: {task_file}")
+        logger.error("Please ensure Task Master is initialized and tasks.json exists")
         return 1
     
     # Load configuration

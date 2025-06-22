@@ -33,6 +33,7 @@ agent:
     - todo_read
     - todo_write
     - mcp
+    - WebFetch
   # Additional claude CLI flags
   extra_flags:
     - "--dangerously-skip-permissions"
@@ -41,7 +42,7 @@ agent:
 supervisor:
   # Model to use for checkpoint analysis
   # Options: "heuristic" (built-in), "claude-3-opus-latest", "claude-3-5-sonnet-20241022", "claude-opus-4-20250514"
-  model: "claude-opus-4-20250514"  # Updated to Opus 4 for AI supervision
+  model: "claude-sonnet-4-20250514"  # Updated to Sonnet 4 to match agent
   # Confidence threshold for intervention (0.0-1.0)
   intervention_threshold: 0.7
   # Whether to show detailed analysis
@@ -133,6 +134,9 @@ zen_integration:
   last_lines_to_check: 50
   # Error detection settings
   auto_debug_error_threshold: 3
+  # Code review frequency - when to run zen code review
+  # Options: "none" (disabled), "task" (after each task), "project" (at end of project)
+  code_review_frequency: "task"
 
 # Processing settings
 processing:
@@ -168,3 +172,5 @@ orchestration:
   max_iterations: 100
   # Orchestrated mode (required for new architecture)
   mode: "orchestrated"
+  # Quick quit detection - if agent/supervisor exits in under this many seconds, it's an error
+  quick_quit_seconds: 10.0

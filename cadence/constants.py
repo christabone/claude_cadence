@@ -15,6 +15,8 @@ class OrchestratorDefaults:
     SESSION_TIMEOUT = 300  # seconds
     SUBPROCESS_TIMEOUT = 300  # seconds, configurable via config.yaml
     CLEANUP_KEEP_SESSIONS = 5
+    QUICK_QUIT_SECONDS = 10.0  # Consider it a quick quit if process exits in under 10 seconds
+
     
 
 class SupervisorDefaults:

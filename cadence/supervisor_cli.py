@@ -11,8 +11,15 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from .task_supervisor import TaskSupervisor
-from .config import ConfigLoader
+# Handle both module and script execution
+try:
+    from .task_supervisor import TaskSupervisor
+    from .config import ConfigLoader
+except ImportError:
+    # When run as a script, use absolute imports
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from cadence.task_supervisor import TaskSupervisor
+    from cadence.config import ConfigLoader
 
 
 def setup_logging(verbose: bool = False):
@@ -42,8 +49,8 @@ def main():
     parser.add_argument(
         "--task-file",
         type=str,
-        required=True,
-        help="Path to Task Master tasks.json file"
+        default=None,
+        help="Path to Task Master tasks.json file (default: .taskmaster/tasks/tasks.json)"
     )
     
     parser.add_argument(
@@ -91,6 +98,7 @@ def main():
         help="Enable verbose logging"
     )
     
+    
     args = parser.parse_args()
     
     # Set up logging
@@ -100,6 +108,10 @@ def main():
     # Validate arguments
     if args.analyze and not args.session_id:
         parser.error("--session-id is required when using --analyze")
+    
+    # Handle task file default
+    if args.task_file is None:
+        args.task_file = ".taskmaster/tasks/tasks.json"
     
     # Load configuration
     config_path = Path(args.config)

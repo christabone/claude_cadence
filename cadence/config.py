@@ -60,6 +60,7 @@ class ZenIntegrationConfig:
     stuck_detection: bool = True
     auto_debug_threshold: int = 3  # Number of errors before calling zen
     cutoff_detection: bool = True  # Detect if task was cut off at turn limit
+    code_review_frequency: str = "task"  # "none", "task", "project"
     
     # Selective task validation patterns
     validate_on_complete: List[str] = field(default_factory=lambda: [

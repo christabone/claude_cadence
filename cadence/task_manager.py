@@ -66,7 +66,12 @@ class TaskManager:
         Returns:
             True if tasks loaded successfully
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Loading tasks from: {self.tasks_file}")
+        
         if not self.tasks_file.exists():
+            logger.error(f"Tasks file does not exist: {self.tasks_file}")
             return False
             
         try:
@@ -74,11 +79,21 @@ class TaskManager:
                 data = json.load(f)
                 
             # Extract tasks from Task Master format
-            if isinstance(data, dict) and 'tasks' in data:
-                task_list = data['tasks']
+            # Handle different Task Master formats
+            if isinstance(data, dict):
+                if 'master' in data and 'tasks' in data['master']:
+                    # New format: {"master": {"tasks": [...]}}
+                    task_list = data['master']['tasks']
+                elif 'tasks' in data:
+                    # Old format: {"tasks": [...]}
+                    task_list = data['tasks']
+                else:
+                    logger.error(f"Unknown task format. Keys found: {list(data.keys())}")
+                    return False
             elif isinstance(data, list):
                 task_list = data
             else:
+                logger.error(f"Unknown data type: {type(data)}")
                 return False
                 
             # Convert to Task objects
@@ -89,7 +104,19 @@ class TaskManager:
                 
             return True
             
-        except (json.JSONDecodeError, IOError):
+        except (json.JSONDecodeError, IOError) as e:
+            # Log the error for debugging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to load tasks: {type(e).__name__}: {e}")
+            return False
+        except Exception as e:
+            # Catch any other exceptions
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Unexpected error loading tasks: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
         
     def analyze_progress(self, output: str) -> Dict[str, List[Task]]:

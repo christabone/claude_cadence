@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from .config import ZenIntegrationConfig, SCRATCHPAD_DIR
+from .zen_prompts import ZenPrompts
 
 # Detection thresholds
 CUTOFF_INDICATOR_THRESHOLD = 3    # Number of indicators before assuming cutoff
@@ -365,13 +366,9 @@ class ZenIntegration:
             models = self.config.models.get("debug", ["o3", "pro"])
             thinking_mode = self.config.thinking_modes.get("debug", "high")
             
-            prompt = self._format_context_prompt(
-                reason, 
-                context,
-                {
-                    "REQUEST": "Please analyze what's going wrong and provide specific guidance to help the agent get unstuck.\nFocus on actionable next steps."
-                }
-            )
+            # Use specialized debug prompt
+            zen_context = self._format_context_prompt(reason, context)
+            prompt = ZenPrompts.debug_prompt(reason, context, zen_context)
             
             # Use first model from list for now
             model = models[0] if models else "pro"
@@ -398,7 +395,8 @@ class ZenIntegration:
                     "Check the specific error context",
                     "Verify dependencies are installed",
                     "Review the scratchpad for patterns"
-                ]
+                ],
+                "prompt_used": prompt  # Store for documentation
             }
 
         
