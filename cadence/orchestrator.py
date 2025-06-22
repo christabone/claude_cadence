@@ -25,6 +25,7 @@ from .prompt_utils import PromptBuilder
 from .utils import generate_session_id
 from .config import ZenIntegrationConfig
 from .prompts import YAMLPromptLoader
+from .log_utils import Colors
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -109,8 +110,16 @@ class SupervisorOrchestrator:
         env = os.environ.copy()
         env['PYTHONUNBUFFERED'] = '1'
         
-        print(f"\n{process_name} working...")
-        print("-" * 50)
+        # Choose color based on process name
+        if process_name == "SUPERVISOR":
+            color = Colors.BOLD_BLUE
+        elif process_name == "AGENT":
+            color = Colors.BOLD_MAGENTA
+        else:
+            color = Colors.BOLD_WHITE
+            
+        print(f"\n{color}{process_name} working...{Colors.RESET}")
+        print(f"{Colors.WHITE}{'-' * 50}{Colors.RESET}")
         
         # Start subprocess
         process = await asyncio.create_subprocess_exec(
@@ -152,12 +161,12 @@ class SupervisorOrchestrator:
                             if item.get('type') == 'text':
                                 text = item.get('text', '').strip()
                                 if text:
-                                    print(f"[{process_name}] {text}")
+                                    print(f"{color}[{process_name}]{Colors.RESET} {text}")
                             elif item.get('type') == 'tool_use':
                                 tool_name = item.get('name', 'unknown')
                                 tool_input = item.get('input', {})
                                 command = tool_input.get('command', '')
-                                print(f"[{process_name}] 🛠️  {tool_name}: {command}")
+                                print(f"{color}[{process_name}]{Colors.RESET} 🛠️  {Colors.YELLOW}{tool_name}{Colors.RESET}: {command}")
                     
                     elif msg_type == 'user':
                         # Tool results
@@ -168,27 +177,27 @@ class SupervisorOrchestrator:
                                 result_content = str(item.get('content', ''))
                                 if len(result_content) > 200:
                                     result_content = result_content[:200] + "..."
-                                print(f"[{process_name}] 📋 Result: {result_content}")
+                                print(f"{color}[{process_name}]{Colors.RESET} 📋 {Colors.CYAN}Result:{Colors.RESET} {result_content}")
                     
                     elif msg_type == 'result':
                         # Final result
                         duration = json_data.get('duration_ms', 0)
                         cost = json_data.get('total_cost_usd', 0)
-                        print(f"[{process_name}] ✅ Completed in {duration}ms, cost: ${cost:.4f}")
+                        print(f"{color}[{process_name}]{Colors.RESET} ✅ {Colors.BOLD_GREEN}Completed{Colors.RESET} in {duration}ms, cost: ${cost:.4f}")
                         
                 except json.JSONDecodeError:
                     # Not JSON, display as plain text
-                    print(f"[{process_name}] {line_str}")
+                    print(f"{color}[{process_name}]{Colors.RESET} {line_str}")
                     
             except Exception as e:
-                print(f"[{process_name}] Error reading output: {e}")
+                print(f"{Colors.RED}[{process_name}] Error reading output: {e}{Colors.RESET}")
                 break
         
         # Wait for process to complete
         await process.wait()
         
-        print("-" * 50)
-        print(f"{process_name} completed with return code {process.returncode}")
+        print(f"{Colors.WHITE}{'-' * 50}{Colors.RESET}")
+        print(f"{color}{process_name} completed with return code {process.returncode}{Colors.RESET}")
         
         return process.returncode, all_output
     
@@ -296,8 +305,22 @@ class SupervisorOrchestrator:
         logger.info(f"Session ID: {self.current_session_id}")
         logger.info("="*60)
         
-        # Clean up any previous completion marker
+        # CRITICAL: Clean up all old session files from previous runs
+        # This MUST happen before any other operations to prevent confusion
+        logger.info("Cleaning up old session files...")
+        self.cleanup_all_session_files()
+        
+        # Also clean up any previous completion marker
         self.cleanup_completion_marker()
+        
+        # Double-check that no old agent result files exist
+        old_agent_results = list(self.supervisor_dir.glob("agent_result_*.json"))
+        if old_agent_results:
+            logger.error(f"WARNING: Found {len(old_agent_results)} old agent result files after cleanup!")
+            for f in old_agent_results:
+                logger.error(f"  - {f.name}")
+        else:
+            logger.debug("Confirmed: No old agent result files exist")
         
         # Update state
         self.state["session_count"] += 1
@@ -312,9 +335,9 @@ class SupervisorOrchestrator:
         
         while iteration < max_iterations:
             iteration += 1
-            logger.info("-"*50)
-            logger.info(f"Iteration {iteration}")
-            logger.info("-"*50)
+            logger.info("="*60)
+            logger.info(f"ITERATION {iteration}")
+            logger.info("="*60)
             
             # Check if completion marker exists
             if completion_marker.exists():
@@ -446,14 +469,25 @@ class SupervisorOrchestrator:
                     previous_agent_result = None
                     if iteration > 1:
                         agent_results_file = self.supervisor_dir / FilePatterns.AGENT_RESULT_FILE.format(session_id=session_id)
+                        logger.debug(f"Checking for agent results file: {agent_results_file}")
                         if agent_results_file.exists():
+                            logger.debug(f"Agent results file exists, loading...")
                             try:
                                 with open(agent_results_file, 'r') as f:
                                     previous_agent_result = json.load(f)
+                                logger.debug(f"Successfully loaded agent results: task_id={previous_agent_result.get('task_id', 'unknown')}")
                             except Exception as e:
                                 logger.warning(f"Failed to load previous agent results: {e}")
+                        else:
+                            logger.debug(f"No agent results file found at {agent_results_file}")
+                    else:
+                        logger.debug(f"First iteration - not checking for agent results")
                     
-                    logger.debug(f"Iteration {iteration}, has_previous_agent_result will be: {previous_agent_result is not None}")
+                    # Log agent result status
+                    if previous_agent_result is not None:
+                        logger.info(f"Previous agent result: Found (task_id={previous_agent_result.get('task_id', 'unknown')})")
+                    else:
+                        logger.info("Previous agent result: None")
                     
                     # Build prompt using YAML templates
                     context = {
@@ -467,8 +501,17 @@ class SupervisorOrchestrator:
                     }
                     
                     # Get base prompt
+                    logger.debug(f"Getting supervisor prompt template with context: has_previous_agent_result={context['has_previous_agent_result']}")
                     base_prompt = self.prompt_loader.get_template("supervisor_prompts.orchestrator_taskmaster.base_prompt")
                     base_prompt = self.prompt_loader.format_template(base_prompt, context)
+                    
+                    # Log a preview of the TASK section to verify correct template
+                    if "Process the agent's completed work" in base_prompt:
+                        logger.debug("Supervisor prompt includes agent work processing (iteration 2+)")
+                    elif "Analyze the current task state and decide what the agent should work on first" in base_prompt:
+                        logger.debug("Supervisor prompt is for first iteration (no agent work)")
+                    else:
+                        logger.warning("Supervisor prompt TASK section unclear - check template rendering")
                     
                     # Get code review section based on config
                     code_review_key = f"supervisor_prompts.orchestrator_taskmaster.code_review_sections.{code_review_frequency}"
@@ -531,11 +574,12 @@ class SupervisorOrchestrator:
                     
                     # Run supervisor
                     logger.debug(f"Command: {' '.join(cmd)}")
-                    logger.info("=" * 50)
-                    logger.info("SUPERVISOR STARTING...")
+                    logger.info("-" * 60)
                     if json_retry_count > 0:
-                        logger.info(f"JSON RETRY ATTEMPT {json_retry_count + 1} of {max_json_retries}")
-                    logger.info("=" * 50)
+                        logger.info(f"SUPERVISOR STARTING... (JSON RETRY {json_retry_count + 1}/{max_json_retries})")
+                    else:
+                        logger.info("SUPERVISOR STARTING...")
+                    logger.info("-" * 60)
                     
                     # Run supervisor with real-time output
                     supervisor_start_time = time.time()
@@ -558,9 +602,9 @@ class SupervisorOrchestrator:
                         logger.error(f"Supervisor execution error: {e}")
                         raise RuntimeError(f"Supervisor execution failed: {e}")
                     
-                    logger.info("=" * 50)
+                    logger.info("-" * 60)
                     logger.info("SUPERVISOR COMPLETED")
-                    logger.info("=" * 50)
+                    logger.info("-" * 60)
                     
                     # Parse supervisor JSON output
                     try:
@@ -892,6 +936,44 @@ class SupervisorOrchestrator:
             logger.debug(f"Saved agent results to {results_file}")
 
 
+    
+    def cleanup_all_session_files(self):
+        """Clean up ALL session files from previous runs"""
+        removed_count = 0
+        
+        # Clean supervisor directory
+        for pattern in ["decision_*.json", "agent_result_*.json", "decision_snapshot_*.json"]:
+            for file in self.supervisor_dir.glob(pattern):
+                try:
+                    file.unlink()
+                    removed_count += 1
+                    logger.debug(f"Removed old session file: {file}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove {file}: {e}")
+        
+        # Clean agent directory
+        for pattern in ["prompt_*.txt", "output_*.log", "error_*.log"]:
+            for file in self.agent_dir.glob(pattern):
+                try:
+                    file.unlink()
+                    removed_count += 1
+                    logger.debug(f"Removed old session file: {file}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove {file}: {e}")
+        
+        # Clean scratchpad directory
+        scratchpad_dir = self.project_root / ".cadence" / "scratchpad"
+        if scratchpad_dir.exists():
+            for file in scratchpad_dir.glob("session_*.md"):
+                try:
+                    file.unlink()
+                    removed_count += 1
+                    logger.debug(f"Removed old scratchpad: {file}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove {file}: {e}")
+        
+        if removed_count > 0:
+            logger.info(f"Cleaned up {removed_count} old session files")
     
     def cleanup_old_sessions(self, keep_last_n: int = 5):
         """Clean up old session files to save space"""

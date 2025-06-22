@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 import yaml
 import re
+from jinja2 import Template
 
 # Output processing constants
 MAX_OUTPUT_TRUNCATE_LENGTH = 3000  # Max chars before truncating supervisor analysis
@@ -53,6 +54,12 @@ class YAMLPromptLoader:
         if visited is None:
             visited = set()
             
+        # First, check if template contains Jinja2 control structures (not just variables)
+        if '{%' in template:
+            # Process with Jinja2
+            jinja_template = Template(template)
+            template = jinja_template.render(**context)
+            
         # Handle nested references like {shared_agent_context.supervision_explanation}
         def replace_ref(match):
             ref = match.group(1)
@@ -79,10 +86,10 @@ class YAMLPromptLoader:
                 return result
             return str(value)
             
-        # First pass: replace config references
+        # Second pass: replace config references
         result = re.sub(r'\{([^}]+)\}', replace_ref, template)
         
-        # Second pass: simple format with context
+        # Third pass: simple format with context
         try:
             result = result.format(**context)
         except KeyError:
@@ -102,9 +109,10 @@ class YAMLPromptLoader:
             else:
                 return ""
                 
-        # If it's a string, format it to resolve any references
+        # Return the raw template string without formatting
+        # This allows Jinja2 templates to be processed later with proper context
         if isinstance(value, str):
-            return self.format_template(value, {})
+            return value
         return ""
         
     def build_prompt_from_sections(self, sections: List[str], context: Dict[str, Any]) -> str:

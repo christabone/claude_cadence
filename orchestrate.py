@@ -17,16 +17,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from cadence.orchestrator import SupervisorOrchestrator
 from cadence.config import ConfigLoader
+from cadence.log_utils import setup_colored_logging
 
 
 def setup_logging(verbose: bool = False):
-    """Set up logging configuration"""
+    """Set up logging configuration with color support"""
     level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    setup_colored_logging(level)
 
 
 def main():

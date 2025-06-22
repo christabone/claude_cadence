@@ -454,27 +454,27 @@ supervisor_prompts:
       REQUIRED OUTPUT:
       After analyzing the tasks, output ONLY a JSON object (no other text) with this exact structure:
       
-      {{
+      {
           "action": "execute",
           "task_id": "1",
           "task_title": "Documentation Setup",
           "subtasks": [
-              {{
+              {
                   "id": "1.1",
                   "title": "Create README.md",
                   "description": "Create a comprehensive README file with project overview"
-              }},
-              {{
+              },
+              {
                   "id": "1.2", 
                   "title": "Set Up Documentation Structure",
                   "description": "Create docs/ directory with initial documentation files"
-              }}
+              }
           ],
           "project_root": "{project_root}",
           "guidance": "Focus on implementing secure authentication using JWT tokens",
           "session_id": "{session_id}",
           "reason": "Task 1 has 2 incomplete subtasks that need implementation"
-      }}
+      }
       
       Remember:
       - Use projectRoot={project_root} in ALL Task Master MCP tool calls
