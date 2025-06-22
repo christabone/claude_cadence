@@ -21,6 +21,8 @@ from .prompts import TodoPromptManager
 from .task_manager import TaskManager, Task
 from .config import ConfigLoader, CadenceConfig, SUPERVISOR_LOG_DIR, SCRATCHPAD_DIR
 from .zen_integration import ZenIntegration
+from .constants import SupervisorDefaults, AgentPromptDefaults
+from .prompt_utils import PromptBuilder
 
 
 @dataclass
@@ -413,8 +415,8 @@ Model: {self.model}
             cmd.extend(self.config.agent.extra_flags)
         
         if self.verbose:
-            print(f"\n🚀 Starting task execution with max {self.max_turns} turns...")
-            print(f"📋 TODOs: {len(todos)} items")
+            self.logger.info(f"Starting task execution with max {self.max_turns} turns...")
+            self.logger.info(f"TODOs: {len(todos)} items")
             
         # Log execution start
         self._log_execution_start(cmd, continuation=bool(continuation_context))
@@ -467,7 +469,7 @@ Model: {self.model}
                     
                     # Main reading loop
                     last_status_check = time.time()
-                    status_check_interval = 30  # Check every 30 seconds
+                    status_check_interval = SupervisorDefaults.STATUS_CHECK_INTERVAL
                     
                     while True:
                         # Check timeout
@@ -643,34 +645,14 @@ Model: {self.model}
             else:
                 return self.prompt_manager.get_initial_prompt()
         
-        # Fallback to simple prompt
-        prompt_parts = []
-        
-        # Add continuation context if provided
-        if continuation_context:
-            prompt_parts.append(f"=== CONTINUATION CONTEXT ===\n{continuation_context}\n")
-        
-        # Add execution guidelines
-        prompt_parts.append("""=== TASK EXECUTION GUIDELINES ===
+        # Fallback to PromptBuilder
+        return PromptBuilder.build_agent_prompt(
+            todos=todos,
+            guidance="",
+            max_turns=self.max_turns,
+            continuation_context=continuation_context
+        )
 
-You have been given specific TODOs to complete. Focus ONLY on these tasks.
-
-IMPORTANT:
-- Work naturally and efficiently to complete all TODOs
-- The moment ALL TODOs are complete, declare "ALL TASKS COMPLETE" and exit
-- You have up to """ + str(self.max_turns) + """ turns as a safety limit (not a target)
-- Quality matters more than speed
-
-""")
-        
-        # Add TODO list
-        prompt_parts.append("=== YOUR TODOS ===")
-        for i, todo in enumerate(todos, 1):
-            prompt_parts.append(f"{i}. {todo}")
-        
-        prompt_parts.append("\nBegin working on these TODOs now.")
-        
-        return "\n".join(prompt_parts)
         
     def _analyze_task_completion(self, output: str, task_list: Optional[List[Dict]]) -> bool:
         """Analyze if tasks are complete"""
@@ -831,3 +813,260 @@ IMPORTANT:
             'zen_tool_used': tool,
             'zen_reason': reason
         }
+    
+    def analyze_and_decide(self, task_file: str, session_id: str, 
+                          continue_from_previous: bool = False) -> Dict:
+        """
+        Analyze current state and output decision for orchestrator
+        
+        This is the new analysis mode for directory-separated architecture.
+        
+        Args:
+            task_file: Path to Task Master tasks.json file
+            session_id: Current session ID
+            continue_from_previous: Whether to continue from previous results
+            
+        Returns:
+            Dict with decision for orchestrator
+        """
+        self.logger.info(f"Starting analysis mode for session {session_id}")
+        
+        # Load tasks and subtasks
+        task_manager = TaskManager()
+        if not task_manager.load_tasks(task_file):
+            return {
+                "action": "error",
+                "reason": f"Failed to load tasks from {task_file}"
+            }
+        
+        # Get previous results if continuing
+        previous_results = None
+        if continue_from_previous:
+            previous_results = self.load_previous_results(session_id)
+            self.logger.info(f"Loaded previous results: {previous_results is not None}")
+        
+        # Find next task with incomplete subtasks
+        current_task = self.get_next_task_with_subtasks(task_manager)
+        
+        if not current_task:
+            self.logger.info("All tasks and subtasks are complete")
+            return {
+                "action": "complete",
+                "reason": "All tasks and subtasks are complete",
+                "session_id": session_id
+            }
+        
+        self.logger.info(f"Working on task {current_task.id}: {current_task.title}")
+        
+        # Extract subtasks as TODOs
+        todos = self.extract_subtask_todos(current_task)
+        
+        if not todos:
+            self.logger.warning(f"Task {current_task.id} has no incomplete subtasks")
+            return {
+                "action": "skip",
+                "reason": f"Task {current_task.id} has no incomplete subtasks",
+                "task_id": current_task.id,
+                "session_id": session_id
+            }
+        
+        self.logger.info(f"Extracted {len(todos)} TODOs from subtasks")
+        
+        # Use AI model to analyze situation
+        analysis = self.supervisor_ai_analysis(
+            current_task=current_task,
+            todos=todos,
+            previous_results=previous_results,
+            session_id=session_id
+        )
+        
+        # Check if zen assistance needed
+        if analysis.get('needs_assistance'):
+            zen_guidance = self.get_zen_assistance_for_analysis(analysis)
+            analysis['guidance'] = analysis.get('guidance', '') + f"\n\n{zen_guidance}"
+            self.logger.info("Added zen assistance to guidance")
+        
+        # Build decision
+        decision = {
+            "action": "execute" if analysis.get('should_execute', True) else "skip",
+            "todos": todos,
+            "guidance": analysis.get('guidance', ''),
+            "task_id": current_task.id,
+            "session_id": session_id,
+            "reason": analysis.get('reasoning', ''),
+            "zen_needed": analysis.get('zen_recommendation')
+        }
+        
+        # Save decision
+        decision_file = Path(".") / f"decision_{session_id}.json"
+        with open(decision_file, 'w') as f:
+            json.dump(decision, f, indent=2)
+        
+        self.logger.info(f"Saved decision to {decision_file}")
+        self._log_supervisor(f"Decision: {decision['action']} for task {current_task.id}")
+        
+        return decision
+    
+    def get_next_task_with_subtasks(self, task_manager: TaskManager) -> Optional[Task]:
+        """Get next task that has incomplete subtasks"""
+        for task in task_manager.tasks:
+            # Check if task has subtasks
+            if hasattr(task, 'subtasks') and task.subtasks:
+                # Check if any subtasks are incomplete
+                incomplete_subtasks = [st for st in task.subtasks if st.status != 'done']
+                if incomplete_subtasks:
+                    self.logger.debug(f"Found task {task.id} with {len(incomplete_subtasks)} incomplete subtasks")
+                    return task
+        return None
+    
+    def extract_subtask_todos(self, task: Task) -> List[str]:
+        """Extract incomplete subtasks as TODOs for agent"""
+        todos = []
+        
+        for subtask in task.subtasks:
+            if subtask.status != 'done':
+                # Format subtask as TODO
+                todo = f"Task {subtask.id}: {subtask.title}"
+                
+                # Add description if available
+                if hasattr(subtask, 'description') and subtask.description:
+                    todo += f"\nDescription: {subtask.description}"
+                
+                # Add implementation details if available
+                if hasattr(subtask, 'details') and subtask.details:
+                    todo += f"\nDetails: {subtask.details}"
+                    
+                # Add test strategy if available
+                if hasattr(subtask, 'testStrategy') and subtask.testStrategy:
+                    todo += f"\nTest Strategy: {subtask.testStrategy}"
+                    
+                todos.append(todo)
+                self.logger.debug(f"Added TODO for subtask {subtask.id}")
+        
+        return todos
+    
+    def load_previous_results(self, session_id: str) -> Optional[Dict]:
+        """Load previous agent results for continuation"""
+        # Look for agent result file in supervisor directory
+        result_file = Path(".") / f"agent_result_{session_id}.json"
+        
+        if result_file.exists():
+            with open(result_file) as f:
+                return json.load(f)
+        
+        self.logger.warning(f"No previous results found for session {session_id}")
+        return None
+    
+    def supervisor_ai_analysis(self, current_task: Task, todos: List[str], 
+                              previous_results: Optional[Dict], session_id: str) -> Dict:
+        """Use AI model to analyze situation and provide guidance"""
+        
+        self.logger.info(f"Performing AI analysis for task {current_task.id}")
+        
+        # Ensure we're using AI model, not heuristic
+        if self.config.supervisor.model == "heuristic":
+            raise ValueError("Supervisor MUST use AI model, not heuristic mode!")
+        
+        # Build context for AI
+        context = self._build_supervisor_context(current_task, todos, previous_results)
+        
+        # Add analysis prompt
+        analysis_prompt = PromptBuilder.build_supervisor_analysis_prompt(
+            context=context,
+            include_json_format=True
+        )
+        
+        try:
+            # Call the supervisor AI model
+            import subprocess
+            import json
+            
+            cmd = [
+                "claude",
+                "-p", analysis_prompt,
+                "--model", self.config.supervisor.model,
+                "--output-format", "json",
+                "--max-turns", "1"
+            ]
+            
+            self.logger.debug(f"Calling AI model: {self.config.supervisor.model}")
+            try:
+                result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True,
+                    timeout=self.config.execution.subprocess_timeout
+                )
+            except subprocess.TimeoutExpired as e:
+                self.logger.error(f"AI model call timed out after {e.timeout}s")
+                return self._get_default_analysis(current_task, todos, previous_results)
+            
+            if result.returncode == 0 and result.stdout:
+                # Parse AI response
+                try:
+                    ai_response = json.loads(result.stdout)
+                    analysis = {
+                        'should_execute': ai_response.get('should_execute', True),
+                        'guidance': ai_response.get('guidance', f"Complete the {len(todos)} subtasks for task {current_task.id}."),
+                        'reasoning': ai_response.get('reasoning', f"Task {current_task.id} has {len(todos)} incomplete subtasks."),
+                        'needs_assistance': ai_response.get('needs_assistance', False)
+                    }
+                    self.logger.info("Successfully got AI analysis")
+                except json.JSONDecodeError:
+                    self.logger.error("Failed to parse AI response as JSON, using defaults")
+                    analysis = self._get_default_analysis(current_task, todos, previous_results)
+            else:
+                self.logger.error(f"AI model call failed: {result.stderr}")
+                analysis = self._get_default_analysis(current_task, todos, previous_results)
+                
+        except Exception as e:
+            self.logger.error(f"Error calling AI model: {e}")
+            analysis = self._get_default_analysis(current_task, todos, previous_results)
+        
+        # Check if previous execution had issues
+        if previous_results and not previous_results.get('success'):
+            analysis['needs_assistance'] = True
+            analysis['guidance'] += "\n\nNote: Previous execution encountered errors. Review the error messages and adjust your approach accordingly."
+        
+        return analysis
+    
+    def _get_default_analysis(self, current_task: Task, todos: List[str], 
+                             previous_results: Optional[Dict]) -> Dict:
+        """Get default analysis when AI call fails"""
+        return {
+            'should_execute': True,
+            'guidance': f"Focus on completing the {len(todos)} subtasks for task {current_task.id}. Work systematically and ensure each subtask is fully complete before moving to the next.",
+            'reasoning': f"Task {current_task.id} has {len(todos)} incomplete subtasks that need attention.",
+            'needs_assistance': bool(previous_results and not previous_results.get('success'))
+        }
+    
+    def _build_supervisor_context(self, current_task: Task, todos: List[str], 
+                                 previous_results: Optional[Dict]) -> str:
+        """Build context for supervisor AI analysis"""
+        completed_subtasks = len([st for st in current_task.subtasks if st.status == 'done'])
+        total_subtasks = len(current_task.subtasks)
+        
+        context = PromptBuilder.build_task_context(
+            task_id=current_task.id,
+            title=current_task.title,
+            completed_subtasks=completed_subtasks,
+            total_subtasks=total_subtasks,
+            todos=todos
+        )
+        
+        if previous_results:
+            context += PromptBuilder.format_execution_results(
+                success=previous_results.get('success'),
+                execution_time=previous_results.get('execution_time', 0),
+                completed_normally=previous_results.get('completed_normally'),
+                requested_help=previous_results.get('requested_help'),
+                error_count=len(previous_results.get('errors', []))
+            )
+        
+        return context
+
+    
+    def get_zen_assistance_for_analysis(self, analysis: Dict) -> str:
+        """Get zen assistance for analysis mode"""
+        # Placeholder for zen integration
+        return "Consider breaking down complex subtasks further if the agent struggles."
