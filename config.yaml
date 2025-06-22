@@ -43,6 +43,16 @@ supervisor:
   # Model to use for checkpoint analysis
   # Options: "heuristic" (built-in), "claude-3-opus-latest", "claude-3-5-sonnet-20241022", "claude-opus-4-20250514"
   model: "claude-sonnet-4-20250514"  # Updated to Sonnet 4 to match agent
+  # Tools available to the supervisor
+  tools:
+    - bash
+    - read
+    - write
+    - edit
+    - grep
+    - glob
+    - search
+    - WebFetch
   # Confidence threshold for intervention (0.0-1.0)
   intervention_threshold: 0.7
   # Whether to show detailed analysis
@@ -106,14 +116,18 @@ integrations:
   
   # MCP (Model Context Protocol) settings
   mcp:
-    # Whether to auto-discover MCP servers
-    auto_discover: true
-    # Specific MCP servers to enable for agents
-    servers:
-      - "taskmaster-ai"
-      - "github"
-      - "filesystem"
-      - "serena"
+    # Supervisor MCP servers (will add mcp__<server>__* automatically)
+    supervisor_servers:
+      - "taskmaster-ai"  # Task management (supervisor only)
+      - "zen"            # Code review and assistance
+      - "serena"         # Semantic code analysis
+      - "Context7"       # Library documentation
+    
+    # Agent MCP servers (will add mcp__<server>__* automatically)
+    agent_servers:
+      - "serena"         # Semantic code analysis
+      - "Context7"       # Library documentation
+      # NOTE: Agent does NOT have access to taskmaster-ai or zen
 
 # Prompt customization
 prompts:

@@ -472,10 +472,21 @@ class SupervisorOrchestrator:
                         # Combine all sections normally
                         supervisor_prompt = f"{base_prompt}{code_review_section}{zen_guidance}{output_format}"
                     
+                    # Build allowed tools from config
+                    basic_tools = self.config.get("supervisor", {}).get("tools", [
+                        "bash", "read", "write", "edit", "grep", "glob", "search", "WebFetch"
+                    ])
+                    mcp_servers = self.config.get("integrations", {}).get("mcp", {}).get("supervisor_servers", [
+                        "taskmaster-ai", "zen", "serena", "Context7"
+                    ])
+                    # Add mcp__ prefix and * suffix to each MCP server
+                    mcp_tools = [f"mcp__{server}__*" for server in mcp_servers]
+                    all_tools = basic_tools + mcp_tools
+                    
                     cmd = [
                         "claude",
                         "-p", supervisor_prompt,
-                        "--allowedTools", "bash,read,write,edit,grep,glob,search,WebFetch,mcp__taskmaster-ai__*,mcp__zen__*,mcp__serena__*,mcp__Context7__*",
+                        "--allowedTools", ",".join(all_tools),
                         "--max-turns", "10",
                         "--output-format", "stream-json",
                         "--verbose",
@@ -691,14 +702,21 @@ class SupervisorOrchestrator:
                     "--dangerously-skip-permissions"  # Skip permission prompts
                 ])
                 
-                # Add allowed tools - include Serena and Context7 but exclude Task Master
-                allowed_tools = self.config.get("allowed_tools", [
+                # Build allowed tools from config
+                basic_tools = self.config.get("agent", {}).get("tools", [
                     "bash", "read", "write", "edit", "grep", "glob", "search",
                     "todo_read", "todo_write", "WebFetch"
                 ])
-                # Add Serena and Context7 MCP tools
-                enhanced_tools = allowed_tools + ["mcp__serena__*", "mcp__Context7__*"]
-                cmd.extend(["--allowedTools", ",".join(enhanced_tools)])
+                
+                # Get MCP servers from config
+                mcp_servers = self.config.get("integrations", {}).get("mcp", {}).get("agent_servers", [
+                    "serena", "Context7"
+                ])
+                # Add mcp__ prefix and * suffix to each MCP server
+                mcp_tools = [f"mcp__{server}__*" for server in mcp_servers]
+                all_tools = basic_tools + mcp_tools
+                
+                cmd.extend(["--allowedTools", ",".join(all_tools)])
                 
                 # Output files
                 output_file = self.validate_path(

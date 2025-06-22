@@ -90,6 +90,9 @@ class ZenIntegrationConfig:
 class SupervisorConfig:
     """Supervisor analysis configuration"""
     model: str = "heuristic"
+    tools: List[str] = field(default_factory=lambda: [
+        "bash", "read", "write", "edit", "grep", "glob", "search", "WebFetch"
+    ])
     intervention_threshold: float = 0.7
     verbose: bool = True
     analysis: Dict[str, bool] = field(default_factory=lambda: {

@@ -274,29 +274,53 @@ supervisor_prompts:
       
       TASK: Analyze the current task state and decide what the agent should work on next.
       
+      {% if has_previous_agent_result %}
+      === CRITICAL: PROCESS AGENT'S COMPLETED WORK FIRST ===
+      The agent just finished working. Before doing ANYTHING else, you MUST:
+      
+      1. Read the agent's scratchpad to understand what was completed:
+         - Read: .cadence/scratchpad/session_{session_id}.md
+         - Look for "ALL TASKS COMPLETE" which means all TODOs were finished
+         - Look for specific TODO completions mentioned in the scratchpad
+      
+      2. The agent was working on task {{ agent_task_id }} with these TODOs:
+         {% for todo in agent_todos %}
+         * TODO {{ loop.index }}: {{ todo }}
+         {% endfor %}
+      
+      3. Based on the agent's scratchpad, update Task Master subtasks:
+         - Get the task details: mcp__taskmaster-ai__get_task --id={{ agent_task_id }} --projectRoot={project_root} --withSubtasks=true
+         - For each TODO the agent completed, find the corresponding subtask
+         - Update completed subtasks: mcp__taskmaster-ai__set_task_status --id=<subtask_id> --status=done --projectRoot={project_root}
+         - IMPORTANT: Match agent TODOs to subtask IDs carefully
+      
+      4. If agent's scratchpad shows "ALL TASKS COMPLETE":
+         - Do YOUR OWN code review first:
+           * Read the files that were modified
+           * Verify the implementation matches requirements
+           * Check code quality and correctness
+         - If your review passes, consider running: mcp__zen__review
+         - Only proceed after reviews are complete
+      
+      ONLY AFTER completing all the above, continue with finding the next task:
+      {% endif %}
+      
       STEPS:
-      1. First, get all tasks to understand the project state:
+      1. Get current project state:
          mcp__taskmaster-ai__get_tasks --projectRoot={project_root}
       
-      2. Find the next available task to work on:
+      2. Find the next available task:
          mcp__taskmaster-ai__next_task --projectRoot={project_root}
       
-      3. If a task is available, get its details including subtasks:
+      3. If a task is available, get its details:
          mcp__taskmaster-ai__get_task --id=<task_id> --projectRoot={project_root} --withSubtasks=true
+         - Check each subtask's status individually
+         - Only include "pending" or "in-progress" subtasks in your TODO list
+         - Skip any subtasks already marked as "done"
       
-      4. Check the agent's previous work (if any):
-         - Read the agent's scratchpad: .cadence/scratchpad/session_{session_id}.md
-         - Look for "ALL TASKS COMPLETE" to see if the agent finished
-         - Check for "HELP NEEDED" or "Status: STUCK" if the agent needs assistance
-         {% if has_previous_agent_result %}
-         - IMPORTANT: The agent just completed work on task {{ agent_task_id }} with these TODOs:
-           {% for todo in agent_todos %}
-           * {{ todo }}
-           {% endfor %}
-         - Agent execution was: {% if agent_success %}SUCCESSFUL{% else %}FAILED{% endif %}
-         - Agent completed normally: {% if agent_completed_normally %}YES (look for "ALL TASKS COMPLETE" in scratchpad){% else %}NO{% endif %}
-         - If agent completed normally and successfully, check scratchpad and consider updating task status
-         {% endif %}
+      4. Check for any blockers or issues:
+         - If this is a fresh task (not continuing), check if a scratchpad exists
+         - Look for any "HELP NEEDED" or blocking issues from previous attempts
       
       5. OPTIONAL - Use Serena for code understanding:
          - If tasks involve code changes, use mcp__serena__find_symbol to understand code structure
@@ -309,16 +333,22 @@ supervisor_prompts:
          - Include relevant guidance in your instructions to the agent
       
       7. Based on the task analysis and agent status, decide on one of these actions:
-         - "execute": If there's a task with subtasks that need to be completed
-         - "skip": If the current task has no subtasks or cannot be worked on
+         - "execute": If there's a task with PENDING subtasks that need to be completed
+           * For partially completed tasks, only send the remaining pending subtasks
+           * Check each subtask's status individually before including it
+           * NEVER send subtasks that are already "done"
+         - "skip": If the current task has no pending subtasks or cannot be worked on
          - "complete": If all tasks in the project are done
          
-         IMPORTANT: If the agent just successfully completed work:
-         - Check if the agent's scratchpad shows "ALL TASKS COMPLETE"
-         - If yes, the task's subtasks are likely done
-         - Follow the CODE REVIEW INSTRUCTIONS below before updating status
+         {% if has_previous_agent_result %}
+         REMINDER: You should have already processed the agent's work in the CRITICAL section above.
+         If you haven't updated Task Master subtasks yet, STOP and do that first!
+         {% endif %}
       
-      8. If action is "execute", extract the subtasks into a TODO list for the agent
+      8. If action is "execute", extract the subtasks into a TODO list for the agent:
+         - ONLY include subtasks with status "pending" or "in-progress"
+         - Each TODO should be the subtask's title and description combined
+         - If all subtasks are already "done", check the next task instead
       
       9. CRITICAL - PROJECT COMPLETION:
          When ALL Task Master tasks show status "done" AND no tasks remain:
@@ -339,9 +369,10 @@ supervisor_prompts:
       task_level: |
         
         CODE REVIEW INSTRUCTIONS:
-        After getting the next task and before deciding your action:
-        1. Check the agent's scratchpad at .cadence/scratchpad/session_{session_id}.md
-        2. If the scratchpad shows "ALL TASKS COMPLETE" and the agent successfully finished all TODOs:
+        {% if has_previous_agent_result %}
+        IMPORTANT: This should be done as part of processing the agent's work BEFORE finding the next task.
+        {% endif %}
+        When the agent completes all TODOs for a task:
            - First, do YOUR OWN code review:
              * Read the files that were modified
              * Check if the implementation matches the task requirements
@@ -403,6 +434,14 @@ supervisor_prompts:
       - Remember: The goal is task completion, not architectural perfection
     
     output_format: |
+      
+      {% if has_previous_agent_result %}
+      WORKFLOW SUMMARY:
+      1. ✅ Process agent's completed work (update subtasks, code review)
+      2. ✅ Find the next task with pending subtasks
+      3. ✅ Create TODO list with ONLY pending subtasks
+      4. ✅ Output JSON decision
+      {% endif %}
       
       REQUIRED OUTPUT:
       After analyzing the tasks, output ONLY a JSON object (no other text) with this exact structure:
