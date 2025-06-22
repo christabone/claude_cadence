@@ -245,7 +245,6 @@ class SupervisorOrchestrator:
                 return json.load(f)
         except FileNotFoundError:
             return {
-                "first_run": True,
                 "session_count": 0,
                 "last_session_id": None,
                 "created_at": datetime.now().isoformat()
@@ -290,26 +289,21 @@ class SupervisorOrchestrator:
             bool: True if all tasks completed successfully
         """
         self.current_session_id = self.generate_session_id()
-        is_first_run = self.state["first_run"]
         
         logger.info("="*60)
         logger.info("Starting Claude Cadence Orchestration")
         logger.info(f"Task file: {self.task_file}")
         logger.info(f"Session ID: {self.current_session_id}")
-        logger.info(f"First run: {is_first_run}")
         logger.info("="*60)
         
         # Clean up any previous completion marker
         self.cleanup_completion_marker()
         
         # Update state
-        self.state["first_run"] = False
         self.state["session_count"] += 1
         self.state["last_session_id"] = self.current_session_id
         self.save_state()
         
-        # Track if this is first iteration of current session
-        first_iteration = True
         max_iterations = self.config.get("max_iterations", OrchestratorDefaults.MAX_ITERATIONS)
         iteration = 0
         
@@ -339,7 +333,7 @@ class SupervisorOrchestrator:
             # 1. Run supervisor to analyze and decide
             decision = self.run_supervisor_analysis(
                 self.current_session_id, 
-                use_continue=not is_first_run and not first_iteration
+                use_continue=(iteration > 1)
             )
             
             # Check if supervisor quit too quickly (likely an error)
@@ -392,7 +386,7 @@ class SupervisorOrchestrator:
                     todos=todos,
                     guidance=decision.guidance,
                     session_id=self.current_session_id,
-                    use_continue=not is_first_run and not first_iteration,
+                    use_continue=(iteration > 1),
                     task_id=decision.task_id,
                     subtasks=decision.subtasks,
                     project_root=decision.project_root
@@ -412,7 +406,6 @@ class SupervisorOrchestrator:
                     logger.warning("Agent requested help - supervisor will provide assistance")
                 
                 # No longer first iteration
-                first_iteration = False
                 
                 # 5. Continue to next iteration
                 continue
@@ -448,15 +441,16 @@ class SupervisorOrchestrator:
                     zen_config = self.config.get("zen_integration", {})
                     code_review_frequency = zen_config.get("code_review_frequency", "task")
                     
-                    # Check if we have previous agent results
-                    agent_results_file = self.supervisor_dir / FilePatterns.AGENT_RESULT_FILE.format(session_id=session_id)
+                    # Check if we have previous agent results (only after first iteration)
                     previous_agent_result = None
-                    if agent_results_file.exists():
-                        try:
-                            with open(agent_results_file, 'r') as f:
-                                previous_agent_result = json.load(f)
-                        except Exception as e:
-                            logger.warning(f"Failed to load previous agent results: {e}")
+                    if iteration > 1:
+                        agent_results_file = self.supervisor_dir / FilePatterns.AGENT_RESULT_FILE.format(session_id=session_id)
+                        if agent_results_file.exists():
+                            try:
+                                with open(agent_results_file, 'r') as f:
+                                    previous_agent_result = json.load(f)
+                            except Exception as e:
+                                logger.warning(f"Failed to load previous agent results: {e}")
                     
                     # Build prompt using YAML templates
                     context = {
