@@ -333,7 +333,8 @@ class SupervisorOrchestrator:
             # 1. Run supervisor to analyze and decide
             decision = self.run_supervisor_analysis(
                 self.current_session_id, 
-                use_continue=(iteration > 1)
+                use_continue=(iteration > 1),
+                iteration=iteration
             )
             
             # Check if supervisor quit too quickly (likely an error)
@@ -422,7 +423,7 @@ class SupervisorOrchestrator:
         return False
 
     
-    def run_supervisor_analysis(self, session_id: str, use_continue: bool) -> SupervisorDecision:
+    def run_supervisor_analysis(self, session_id: str, use_continue: bool, iteration: int) -> SupervisorDecision:
             """Run supervisor in its directory to analyze state"""
             original_dir = os.getcwd()
             max_json_retries = 5
