@@ -34,9 +34,12 @@ logger = logging.getLogger(__name__)
 class SupervisorDecision:
     """Decision made by supervisor analysis"""
     action: str  # "execute", "skip", "complete"
-    todos: List[str] = None
-    guidance: str = ""
+    todos: List[str] = None  # For backward compatibility
     task_id: str = ""
+    task_title: str = ""
+    subtasks: List[Dict] = None  # List of subtask dicts with id, title, description
+    project_root: str = ""
+    guidance: str = ""
     session_id: str = ""
     reason: str = ""
     zen_needed: Optional[Dict] = None
@@ -360,14 +363,39 @@ class SupervisorOrchestrator:
                 logger.info(f"Skipping: {decision.reason}")
                 continue
             elif decision.action == "execute":
-                logger.info(f"Executing agent with {len(decision.todos)} TODOs")
+                # Save the decision as a snapshot for later review
+                snapshot_file = self.validate_path(
+                    self.supervisor_dir / f"decision_snapshot_{decision.session_id}.json",
+                    self.supervisor_dir
+                )
+                with open(snapshot_file, 'w') as f:
+                    json.dump({
+                        "task_id": decision.task_id,
+                        "task_title": decision.task_title,
+                        "subtasks": decision.subtasks,
+                        "project_root": decision.project_root,
+                        "guidance": decision.guidance,
+                        "session_id": decision.session_id,
+                        "timestamp": datetime.now().isoformat()
+                    }, f, indent=2)
+                
+                # Extract todos from subtasks or use legacy todos
+                if decision.subtasks:
+                    todos = [f"{st['title']}: {st['description']}" for st in decision.subtasks]
+                    logger.info(f"Executing agent with {len(decision.subtasks)} subtasks")
+                else:
+                    todos = decision.todos
+                    logger.info(f"Executing agent with {len(decision.todos)} TODOs")
                 
                 # 3. Run agent with supervisor's TODOs
                 agent_result = self.run_agent(
-                    todos=decision.todos,
+                    todos=todos,
                     guidance=decision.guidance,
                     session_id=self.current_session_id,
-                    use_continue=not is_first_run and not first_iteration
+                    use_continue=not is_first_run and not first_iteration,
+                    task_id=decision.task_id,
+                    subtasks=decision.subtasks,
+                    project_root=decision.project_root
                 )
                 
                 # Check if agent quit too quickly (likely an error)
@@ -566,9 +594,8 @@ class SupervisorOrchestrator:
                                                 for match in matches:
                                                     try:
                                                         test_data = json.loads(match)
-                                                        # Verify it has all required fields
-                                                        required_fields = ['action', 'todos', 'guidance', 'task_id', 'session_id', 'reason']
-                                                        if all(field in test_data for field in required_fields):
+                                                        # Verify it has action field at minimum
+                                                        if 'action' in test_data:
                                                             json_str = match
                                                             break
                                                     except json.JSONDecodeError:
@@ -613,8 +640,18 @@ class SupervisorOrchestrator:
                         
                         decision_data = json.loads(json_str)
                         
-                        # Validate required fields
-                        required_fields = ['action', 'todos', 'guidance', 'task_id', 'session_id', 'reason']
+                        # Validate required fields based on action
+                        if decision_data.get('action') == 'execute':
+                            # For execute action, check for new subtasks structure
+                            if 'subtasks' in decision_data:
+                                required_fields = ['action', 'task_id', 'task_title', 'subtasks', 'project_root', 'session_id', 'reason']
+                            else:
+                                # Backward compatibility with todos
+                                required_fields = ['action', 'todos', 'guidance', 'task_id', 'session_id', 'reason']
+                        else:
+                            # For skip/complete actions
+                            required_fields = ['action', 'session_id', 'reason']
+                        
                         missing_fields = [field for field in required_fields if field not in decision_data]
                         if missing_fields:
                             raise ValueError(f"Decision JSON missing required fields: {missing_fields}")
@@ -665,7 +702,9 @@ class SupervisorOrchestrator:
 
     
     def run_agent(self, todos: List[str], guidance: str, 
-                      session_id: str, use_continue: bool) -> AgentResult:
+                      session_id: str, use_continue: bool,
+                      task_id: str = None, subtasks: List[Dict] = None,
+                      project_root: str = None) -> AgentResult:
             """Run agent in dedicated agent directory"""
             original_dir = os.getcwd()
             
@@ -674,7 +713,7 @@ class SupervisorOrchestrator:
                 os.chdir(self.agent_dir)
                 
                 # Create prompt with TODOs
-                prompt = self.build_agent_prompt(todos, guidance)
+                prompt = self.build_agent_prompt(todos, guidance, task_id, subtasks, project_root)
                 
                 # Save prompt for debugging
                 prompt_file = self.validate_path(
@@ -811,7 +850,9 @@ class SupervisorOrchestrator:
                 os.chdir(original_dir)
 
     
-    def build_agent_prompt(self, todos: List[str], guidance: str) -> str:
+    def build_agent_prompt(self, todos: List[str], guidance: str, 
+                          task_id: str = None, subtasks: List[Dict] = None, 
+                          project_root: str = None) -> str:
         """Build prompt for agent with TODOs and guidance"""
         # Check if guidance includes Zen assistance
         if "zen assistance" in guidance.lower() or "expert assistance" in guidance.lower():
@@ -821,7 +862,10 @@ class SupervisorOrchestrator:
         return PromptBuilder.build_agent_prompt(
             todos=todos,
             guidance=guidance,
-            max_turns=self.config.get("max_turns", OrchestratorDefaults.MAX_AGENT_TURNS)
+            max_turns=self.config.get("max_turns", OrchestratorDefaults.MAX_AGENT_TURNS),
+            task_id=task_id,
+            subtasks=subtasks,
+            project_root=project_root
         )
 
 

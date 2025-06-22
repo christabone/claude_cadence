@@ -125,9 +125,10 @@ integrations:
     
     # Agent MCP servers (will add mcp__<server>__* automatically)
     agent_servers:
+      - "taskmaster-ai"  # Task management (agent can now update its own tasks)
       - "serena"         # Semantic code analysis
       - "Context7"       # Library documentation
-      # NOTE: Agent does NOT have access to taskmaster-ai or zen
+      # NOTE: Agent does NOT have access to zen (code review remains supervisor-only)
 
 # Prompt customization
 prompts:

@@ -278,23 +278,27 @@ supervisor_prompts:
       === CRITICAL: PROCESS AGENT'S COMPLETED WORK FIRST ===
       The agent just finished working. Before doing ANYTHING else, you MUST:
       
-      1. Read the agent's scratchpad to understand what was completed:
+      1. Read the decision snapshot to see what was requested:
+         - Read: .cadence/supervisor/decision_snapshot_{session_id}.json
+         - This shows exactly what task/subtasks were assigned to the agent
+      
+      2. Read the agent's scratchpad to understand what was completed:
          - Read: .cadence/scratchpad/session_{session_id}.md
          - Look for "ALL TASKS COMPLETE" which means all TODOs were finished
          - Look for specific TODO completions mentioned in the scratchpad
       
-      2. The agent was working on task {{ agent_task_id }} with these TODOs:
-         {% for todo in agent_todos %}
-         * TODO {{ loop.index }}: {{ todo }}
-         {% endfor %}
+      3. Compare the snapshot with actual completion:
+         - The snapshot shows what subtasks were assigned
+         - Check Task Master to see which subtasks the agent updated
+         - Note: Agent should have updated subtask statuses autonomously
       
-      3. Based on the agent's scratchpad, update Task Master subtasks:
+      4. Verify Task Master updates:
          - Get the task details: mcp__taskmaster-ai__get_task --id={{ agent_task_id }} --projectRoot={project_root} --withSubtasks=true
-         - For each TODO the agent completed, find the corresponding subtask
-         - Update completed subtasks: mcp__taskmaster-ai__set_task_status --id=<subtask_id> --status=done --projectRoot={project_root}
-         - IMPORTANT: Match agent TODOs to subtask IDs carefully
+         - Check which subtasks are now marked as "done" by the agent
+         - If agent missed updating any completed subtasks, update them yourself
+         - Only update subtasks that were actually completed based on scratchpad
       
-      4. If agent's scratchpad shows "ALL TASKS COMPLETE":
+      5. If agent's scratchpad shows "ALL TASKS COMPLETE":
          - Do YOUR OWN code review first:
            * Read the files that were modified
            * Verify the implementation matches requirements
@@ -448,23 +452,34 @@ supervisor_prompts:
       
       {{
           "action": "execute",
-          "todos": [
-              "Implement the user authentication module",
-              "Add JWT token generation",
-              "Create login endpoint"
+          "task_id": "1",
+          "task_title": "Documentation Setup",
+          "subtasks": [
+              {{
+                  "id": "1.1",
+                  "title": "Create README.md",
+                  "description": "Create a comprehensive README file with project overview"
+              }},
+              {{
+                  "id": "1.2", 
+                  "title": "Set Up Documentation Structure",
+                  "description": "Create docs/ directory with initial documentation files"
+              }}
           ],
+          "project_root": "{project_root}",
           "guidance": "Focus on implementing secure authentication using JWT tokens",
-          "task_id": "1.2",
           "session_id": "{session_id}",
-          "reason": "Task 1.2 has 3 incomplete subtasks that need implementation"
+          "reason": "Task 1 has 2 incomplete subtasks that need implementation"
       }}
       
       Remember:
       - Use projectRoot={project_root} in ALL Task Master MCP tool calls
       - Output ONLY the JSON object, no explanatory text before or after
-      - todos should be the actual subtask descriptions from the task details
+      - Include ONLY pending/in-progress subtasks in the subtasks array
+      - Each subtask must include id, title, and description from Task Master
+      - The project_root field tells the agent where Task Master files are located
       - If ALL Task Master tasks show status "done", set action to "complete" AND create .cadence/project_complete.marker
-      - If no tasks have subtasks, set action to "skip"
+      - If no tasks have pending subtasks, set action to "skip"
       - For code reviews, call mcp__zen__review directly when instructed
       - The orchestrator will continue running until you signal completion with the marker file
   

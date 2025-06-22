@@ -29,7 +29,10 @@ IMPORTANT:
     def build_agent_prompt(todos: List[str], 
                           guidance: str = "", 
                           max_turns: int = AgentPromptDefaults.DEFAULT_MAX_TURNS,
-                          continuation_context: Optional[str] = None) -> str:
+                          continuation_context: Optional[str] = None,
+                          task_id: str = None,
+                          subtasks: List[dict] = None,
+                          project_root: str = None) -> str:
         """
         Build prompt for agent with TODOs and guidance
         
@@ -47,6 +50,30 @@ IMPORTANT:
         # Add continuation context if provided
         if continuation_context:
             prompt_parts.append(f"=== CONTINUATION CONTEXT ===\n{continuation_context}\n")
+        
+        # Add Task Master information if provided
+        if task_id and subtasks and project_root:
+            task_master_info = f"""=== TASK MASTER INFORMATION ===
+You are working on Task {task_id} with the following subtasks:
+
+"""
+            for subtask in subtasks:
+                task_master_info += f"- Subtask {subtask['id']}: {subtask['title']}\n"
+                if subtask.get('description'):
+                    task_master_info += f"  Description: {subtask['description']}\n"
+            
+            task_master_info += f"""
+Project Root: {project_root}
+
+IMPORTANT: You have access to Task Master MCP tools. You should:
+1. Update subtask status as you complete each one using:
+   mcp__taskmaster-ai__set_task_status --id=<subtask_id> --status=in-progress --projectRoot={project_root}
+   mcp__taskmaster-ai__set_task_status --id=<subtask_id> --status=done --projectRoot={project_root}
+2. Add implementation notes to subtasks as needed:
+   mcp__taskmaster-ai__update_subtask --id=<subtask_id> --prompt="implementation notes..." --projectRoot={project_root}
+
+"""
+            prompt_parts.append(task_master_info)
         
         # Add guidance if provided
         if guidance:
