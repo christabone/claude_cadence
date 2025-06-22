@@ -146,10 +146,6 @@ class TaskSupervisor:
         """Check the agent's scratchpad for status updates"""
         scratchpad_path = Path(SCRATCHPAD_DIR) / f"session_{session_id}.md"
         
-        if not scratchpad_path.exists():
-            self.logger.warning(f"Scratchpad not found: {scratchpad_path}")
-            return {"exists": False}
-            
         try:
             with open(scratchpad_path, 'r') as f:
                 content = f.read()
@@ -174,6 +170,9 @@ class TaskSupervisor:
             
             return status
             
+        except FileNotFoundError:
+            self.logger.warning(f"Scratchpad not found: {scratchpad_path}")
+            return {"exists": False}
         except Exception as e:
             self.logger.error(f"Error reading scratchpad: {e}")
             return {"exists": True, "error": str(e)}
@@ -613,7 +612,7 @@ Model: {self.model}
         if zen_check:
             tool, reason = zen_check
             if self.verbose:
-                print(f"\n🔮 Zen assistance needed: {tool} - {reason}")
+                self.logger.info(f"Zen assistance needed: {tool} - {reason}")
             
             # Log zen recommendation
             self._log_zen_recommendation(tool, reason)
@@ -675,7 +674,7 @@ Model: {self.model}
                 
             except Exception as e:
                 if self.verbose:
-                    print(f"⚠️  Task analysis failed: {e}")
+                    self.logger.warning(f"Task analysis failed: {e}")
                     
         return False
     def _cleanup_session(self, session_id: str):
@@ -699,10 +698,10 @@ Model: {self.model}
             try:
                 task_manager = TaskManager()
                 if not task_manager.load_tasks(task_file):
-                    print(f"❌ Failed to load tasks from {task_file}")
+                    self.logger.error(f"Failed to load tasks from {task_file}")
                     return False
                     
-                print(f"📋 Loaded {len(task_manager.tasks)} tasks from Task Master")
+                self.logger.info(f"Loaded {len(task_manager.tasks)} tasks from Task Master")
                 
                 # Convert tasks to TODOs
                 todos = []
@@ -714,10 +713,10 @@ Model: {self.model}
                         todos.append(todo)
                         
                 if not todos:
-                    print("✅ All tasks are already complete!")
+                    self.logger.info("All tasks are already complete!")
                     return True
                     
-                print(f"🎯 {len(todos)} tasks to complete")
+                self.logger.info(f"{len(todos)} tasks to complete")
                 
                 # Prompt manager will be created in execute_with_todos
                 
@@ -737,12 +736,12 @@ Model: {self.model}
                     
                     # Print summary
                     if self.verbose:
-                        print(f"\n📈 Execution Summary:")
-                        print(f"   - Success: {result.success}")
-                        print(f"   - Turns used: {result.turns_used}/{self.max_turns}")
-                        print(f"   - Tasks complete: {result.task_complete}")
+                        self.logger.info("Execution Summary:")
+                        self.logger.info(f"   - Success: {result.success}")
+                        self.logger.info(f"   - Turns used: {result.turns_used}/{self.max_turns}")
+                        self.logger.info(f"   - Tasks complete: {result.task_complete}")
                         if result.errors:
-                            print(f"   - Errors: {len(result.errors)}")
+                            self.logger.info(f"   - Errors: {len(result.errors)}")
                             
                     # Update task status if configured
                     if self.config.integrations["taskmaster"]["auto_update_status"] and result.task_complete:
@@ -750,7 +749,7 @@ Model: {self.model}
                         for task in task_manager.tasks:
                             task_manager.update_task_status(task.id, "done")
                         task_manager.save_tasks(task_file)
-                        print("✅ Updated task status in Task Master")
+                        self.logger.info("Updated task status in Task Master")
                         self._log_supervisor("All tasks marked as complete in Task Master")
                         
                     # Log final summary
@@ -758,7 +757,7 @@ Model: {self.model}
                     
                     # Log supervisor log location
                     if self.current_log_path and self.verbose:
-                        print(f"\n📝 Supervisor log: {self.current_log_path}")
+                        self.logger.info(f"Supervisor log: {self.current_log_path}")
                         
                     return result.task_complete
                     
@@ -767,7 +766,7 @@ Model: {self.model}
                     self._cleanup_session(session_id)
                     
             except Exception as e:
-                print(f"❌ Error running with Task Master: {e}")
+                self.logger.error(f"Error running with Task Master: {e}")
                 return False
 
             
@@ -950,12 +949,12 @@ Model: {self.model}
         # Look for agent result file in supervisor directory
         result_file = Path(".") / f"agent_result_{session_id}.json"
         
-        if result_file.exists():
+        try:
             with open(result_file) as f:
                 return json.load(f)
-        
-        self.logger.warning(f"No previous results found for session {session_id}")
-        return None
+        except FileNotFoundError:
+            self.logger.warning(f"No previous results found for session {session_id}")
+            return None
     
     def supervisor_ai_analysis(self, current_task: Task, todos: List[str], 
                               previous_results: Optional[Dict], session_id: str) -> Dict:

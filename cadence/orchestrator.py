@@ -9,6 +9,7 @@ import os
 import json
 import subprocess
 import time
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
@@ -72,15 +73,16 @@ class SupervisorOrchestrator:
         
     def load_state(self) -> Dict:
         """Load orchestrator state to track if this is first run"""
-        if self.state_file.exists():
+        try:
             with open(self.state_file) as f:
                 return json.load(f)
-        return {
-            "first_run": True,
-            "session_count": 0,
-            "last_session_id": None,
-            "created_at": datetime.now().isoformat()
-        }
+        except FileNotFoundError:
+            return {
+                "first_run": True,
+                "session_count": 0,
+                "last_session_id": None,
+                "created_at": datetime.now().isoformat()
+            }
     
     def save_state(self):
         """Save orchestrator state"""
@@ -414,9 +416,6 @@ class SupervisorOrchestrator:
     
     def cleanup_old_sessions(self, keep_last_n: int = 5):
         """Clean up old session files to save space"""
-        if keep_last_n is None:
-            keep_last_n = self.config.get("cleanup_keep_sessions", OrchestratorDefaults.CLEANUP_KEEP_SESSIONS)
-            
         # Get all session files from both directories
         session_files = []
         
@@ -432,11 +431,13 @@ class SupervisorOrchestrator:
                 
         # Extract session IDs and group by session
         sessions = {}
+        # Regex to match the session ID format (e.g., 20231027_103000_a1b2c3d4)
+        session_id_pattern = re.compile(r"(\d{8}_\d{6}_[a-f0-9]{8})")
+        
         for file in session_files:
-            # Extract session ID from filename (format: prefix_YYYYMMDD_HHMMSS_uuid.ext)
-            parts = file.stem.split('_')
-            if len(parts) >= 4:
-                session_id = '_'.join(parts[-3:])  # YYYYMMDD_HHMMSS_uuid
+            match = session_id_pattern.search(file.name)
+            if match:
+                session_id = match.group(1)
                 if session_id not in sessions:
                     sessions[session_id] = []
                 sessions[session_id].append(file)
