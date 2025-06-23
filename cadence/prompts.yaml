@@ -774,3 +774,44 @@ final_summary:
     Consider running another supervision session to complete remaining tasks.
     Alternatively, continue manually with the following focus:
     {focus_items}
+
+# Task Supervisor specific templates (replacing PromptBuilder methods)
+task_supervisor:
+  # Replaces PromptBuilder.build_supervisor_analysis_prompt()
+  analysis_prompt: |
+    {context}
+
+    Analyze the situation and provide:
+    1. Whether the agent should execute these TODOs (should_execute: true/false)
+    2. Specific guidance for the agent to complete these subtasks successfully
+    3. Your reasoning for this decision
+    4. Whether zen assistance might be helpful (needs_assistance: true/false)
+
+    Consider:
+    - The complexity and nature of the subtasks
+    - Any previous execution results and errors
+    - The best approach for the agent to succeed
+    - Whether the subtasks are clear and well-defined
+    {% if include_json_format %}
+    
+    Respond in JSON format with keys: should_execute, guidance, reasoning, needs_assistance
+    {% endif %}
+  
+  # Replaces PromptBuilder.build_task_context()
+  task_context: |
+    You are a supervisor analyzing the current state of task execution.
+
+    Current Task: {task_id} - {title}
+    Status: {completed_subtasks}/{total_subtasks} subtasks complete
+
+    Remaining TODOs:
+    {todos_list}
+  
+  # Replaces PromptBuilder.format_execution_results()
+  execution_results: |
+    Previous Execution Results:
+    - Success: {success}
+    - Execution Time: {execution_time:.2f}s
+    - Completed Normally: {completed_normally}
+    - Requested Help: {requested_help}
+    - Errors: {error_count}

@@ -17,12 +17,11 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime
 import uuid
-from .prompts import TodoPromptManager
+from .prompts import TodoPromptManager, YAMLPromptLoader
 from .task_manager import TaskManager, Task
 from .config import ConfigLoader, CadenceConfig, SUPERVISOR_LOG_DIR, SCRATCHPAD_DIR
 from .zen_integration import ZenIntegration
 from .constants import SupervisorDefaults, AgentPromptDefaults
-from .prompt_utils import PromptBuilder
 from .utils import generate_session_id
 
 
@@ -95,6 +94,9 @@ class TaskSupervisor:
             config.supervisor.zen_integration, 
             verbose=self.verbose
         )
+        
+        # Initialize YAML prompt loader for replacing PromptBuilder
+        self.prompt_loader = YAMLPromptLoader()
         
         # Initialize supervisor log directory
         self.supervisor_log_dir = Path(SUPERVISOR_LOG_DIR)
@@ -635,31 +637,30 @@ class TaskSupervisor:
         return result
         
     def _build_todo_prompt(self, todos: List[str], continuation_context: Optional[str] = None) -> str:
-        """Build prompt with TODO list for agent"""
+        """Build prompt with TODO list for agent using YAML system"""
         
-        # Use prompt manager if available
-        if hasattr(self, 'prompt_manager'):
-            if continuation_context:
-                # Create supervisor analysis dict
-                supervisor_analysis = {
-                    'session_id': self.prompt_manager.session_id,
-                    'previous_session_id': getattr(self, 'previous_session_id', 'unknown')
-                }
-                return self.prompt_manager.get_continuation_prompt(
-                    analysis_guidance="Continue where you left off. Focus on completing the remaining TODOs.",
-                    continuation_context=continuation_context,
-                    supervisor_analysis=supervisor_analysis
-                )
-            else:
-                return self.prompt_manager.get_initial_prompt()
+        # Ensure prompt manager is available - create if needed
+        if not hasattr(self, 'prompt_manager') or self.prompt_manager is None:
+            # Create prompt manager with current session if needed
+            session_id = getattr(self, 'current_session_id', generate_session_id())
+            self.prompt_manager = TodoPromptManager(todos, self.max_turns)
+            self.prompt_manager.session_id = session_id
+            self.prompt_manager.task_numbers = ""  # Default empty task numbers
         
-        # Fallback to PromptBuilder
-        return PromptBuilder.build_agent_prompt(
-            todos=todos,
-            guidance="",
-            max_turns=self.max_turns,
-            continuation_context=continuation_context
-        )
+        # Generate prompt using YAML system
+        if continuation_context:
+            # Create supervisor analysis dict
+            supervisor_analysis = {
+                'session_id': self.prompt_manager.session_id,
+                'previous_session_id': getattr(self, 'previous_session_id', 'unknown')
+            }
+            return self.prompt_manager.get_continuation_prompt(
+                analysis_guidance="Continue where you left off. Focus on completing the remaining TODOs.",
+                continuation_context=continuation_context,
+                supervisor_analysis=supervisor_analysis
+            )
+        else:
+            return self.prompt_manager.get_initial_prompt()
 
         
     def _analyze_task_completion(self, output: str, task_list: Optional[List[Dict]]) -> bool:
@@ -891,11 +892,12 @@ class TaskSupervisor:
         # Build context for AI
         context = self._build_supervisor_context(current_task, todos, previous_results)
         
-        # Add analysis prompt
-        analysis_prompt = PromptBuilder.build_supervisor_analysis_prompt(
-            context=context,
-            include_json_format=True
-        )
+        # Add analysis prompt using YAML template
+        template = self.prompt_loader.get_template("task_supervisor.analysis_prompt")
+        analysis_prompt = self.prompt_loader.format_template(template, {
+            'context': context,
+            'include_json_format': True
+        })
         
         try:
             # Call the supervisor AI model
@@ -967,22 +969,27 @@ class TaskSupervisor:
         completed_subtasks = len([st for st in current_task.subtasks if st.status == 'done'])
         total_subtasks = len(current_task.subtasks)
         
-        context = PromptBuilder.build_task_context(
-            task_id=current_task.id,
-            title=current_task.title,
-            completed_subtasks=completed_subtasks,
-            total_subtasks=total_subtasks,
-            todos=todos
-        )
+        # Build task context using YAML template
+        template = self.prompt_loader.get_template("task_supervisor.task_context")
+        context = self.prompt_loader.format_template(template, {
+            'task_id': current_task.id,
+            'title': current_task.title,
+            'completed_subtasks': completed_subtasks,
+            'total_subtasks': total_subtasks,
+            'todos_list': '\n'.join(f'- {todo}' for todo in todos)
+        })
         
         if previous_results:
-            context += PromptBuilder.format_execution_results(
-                success=previous_results.get('success'),
-                execution_time=previous_results.get('execution_time', 0),
-                completed_normally=previous_results.get('completed_normally'),
-                requested_help=previous_results.get('requested_help'),
-                error_count=len(previous_results.get('errors', []))
-            )
+            # Add execution results using YAML template
+            template = self.prompt_loader.get_template("task_supervisor.execution_results")
+            execution_results = self.prompt_loader.format_template(template, {
+                'success': previous_results.get('success'),
+                'execution_time': previous_results.get('execution_time', 0),
+                'completed_normally': previous_results.get('completed_normally'),
+                'requested_help': previous_results.get('requested_help'),
+                'error_count': len(previous_results.get('errors', []))
+            })
+            context += "\n\n" + execution_results
         
         return context
 
