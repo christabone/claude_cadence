@@ -860,7 +860,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                 os.chdir(self.agent_dir)
                 
                 # Create prompt with TODOs
-                prompt = self.build_agent_prompt(todos, guidance, task_id, subtasks, project_root)
+                prompt = self.build_agent_prompt(todos, guidance, task_id, subtasks, project_root, use_continue)
                 
                 # Save prompt for debugging
                 prompt_file = self.validate_path(
@@ -999,22 +999,51 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
     
     def build_agent_prompt(self, todos: List[str], guidance: str, 
                           task_id: str = None, subtasks: List[Dict] = None, 
-                          project_root: str = None) -> str:
+                          project_root: str = None, use_continue: bool = False) -> str:
         """Build prompt for agent with TODOs and guidance"""
         # Create a PromptGenerator instance
         prompt_generator = PromptGenerator(self.prompt_loader)
         
-        # Generate the initial prompt with proper YAML templates
-        base_prompt = prompt_generator.generate_initial_todo_prompt(
-            todos=todos,
-            max_turns=self.config.get("max_turns", OrchestratorDefaults.MAX_AGENT_TURNS),
-            session_id=self.current_session_id if hasattr(self, 'current_session_id') else "unknown",
-            task_numbers=str(task_id) if task_id else "",
-            project_root=project_root or str(self.project_root)
-        )
+        session_id = self.current_session_id if hasattr(self, 'current_session_id') else "unknown"
+        max_turns = self.config.get("max_turns", OrchestratorDefaults.MAX_AGENT_TURNS)
         
-        # Add supervisor guidance if provided
-        if guidance:
+        if use_continue:
+            # Generate continuation prompt for resumed execution
+            from .prompts import ExecutionContext
+            
+            context = ExecutionContext(
+                todos=todos,
+                max_turns=max_turns,
+                session_id=session_id,
+                task_numbers=str(task_id) if task_id else "",
+                project_root=project_root or str(self.project_root)
+            )
+            
+            # Create supervisor analysis for continuation context
+            supervisor_analysis = {
+                'session_id': session_id,
+                'previous_session_id': getattr(self, 'previous_session_id', 'unknown'),
+                'completed_normally': False,  # Will be updated based on actual analysis
+                'has_issues': False  # Will be updated based on actual analysis
+            }
+            
+            base_prompt = prompt_generator.generate_continuation_prompt(
+                context=context,
+                analysis_guidance=guidance or "Continue where you left off. Focus on completing the remaining TODOs.",
+                supervisor_analysis=supervisor_analysis
+            )
+        else:
+            # Generate the initial prompt with proper YAML templates
+            base_prompt = prompt_generator.generate_initial_todo_prompt(
+                todos=todos,
+                max_turns=max_turns,
+                session_id=session_id,
+                task_numbers=str(task_id) if task_id else "",
+                project_root=project_root or str(self.project_root)
+            )
+        
+        # Add supervisor guidance if provided (only for initial prompts, continuation prompts handle guidance differently)
+        if guidance and not use_continue:
             guidance_section = f"\n=== SUPERVISOR GUIDANCE ===\n{guidance}\n"
             # Check if guidance includes Zen assistance
             if "zen assistance" in guidance.lower() or "expert assistance" in guidance.lower():

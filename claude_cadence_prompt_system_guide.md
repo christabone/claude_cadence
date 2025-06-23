@@ -161,16 +161,16 @@ code_review_key = f"supervisor_prompts.orchestrator_taskmaster.code_review_secti
 
 Options: `none`, `task`, `project` - includes conditional text based on `has_previous_agent_result`
 
-#### Agent Prompt (Continuation) - Currently Not Implemented
-**Status**: Continuation prompts are defined in YAML but orchestrator doesn't use them
+#### Agent Prompt (Continuation) - ✅ Now Implemented
+**Status**: Continuation prompts are now fully implemented and used by the orchestrator
 
-**Would use**: `agent_prompts.continuation.sections` with these additions:
+**Uses**: `agent_prompts.continuation.sections` with these features:
 - Continuation context and session references
-- Previous work analysis from supervisor
+- Previous work analysis from supervisor via `analysis_guidance`
 - Task status sections (completed vs remaining)
 - Continuation-specific next steps guidance
 
-**Current Reality**: All agent runs use initial prompt format from `PromptGenerator.generate_initial_todo_prompt()`
+**Implementation**: When `iteration > 1`, the orchestrator calls `PromptGenerator.generate_continuation_prompt()` instead of `generate_initial_todo_prompt()`
 
 ## Comprehensive Variable Analysis
 
