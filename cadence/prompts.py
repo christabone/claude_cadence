@@ -33,7 +33,7 @@ class ExecutionContext:
 
 class YAMLPromptLoader:
     """Loads and manages prompts from YAML configuration"""
-    
+
     def __init__(self, config_path: Optional[str] = None):
         """Initialize with YAML config file"""
         if config_path is None:
@@ -41,7 +41,7 @@ class YAMLPromptLoader:
             config_path = Path(__file__).parent / "prompts.yaml"
         else:
             config_path = Path(config_path)
-            
+
         try:
             with open(config_path, 'r') as f:
                 self.config = yaml.safe_load(f)
@@ -49,28 +49,28 @@ class YAMLPromptLoader:
             raise IOError(f"Prompt configuration file not found at: {config_path}")
         except yaml.YAMLError as e:
             raise ValueError(f"Error parsing YAML file {config_path}: {e}")
-            
+
     def format_template(self, template: str, context: Dict[str, Any], visited: Optional[set] = None) -> str:
         """Format a template string with context variables"""
         if visited is None:
             visited = set()
-            
+
         # First, check if template contains Jinja2 control structures (not just variables)
         if '{%' in template:
             # Process with Jinja2
             jinja_template = Template(template)
             template = jinja_template.render(**context)
-            
+
         # Handle nested references like {shared_agent_context.supervision_explanation}
         def replace_ref(match):
             ref = match.group(1)
-            
+
             # Check for cycles
             if ref in visited:
                 return f"{{CYCLE_DETECTED: {ref}}}"
-                
+
             parts = ref.split('.')
-            
+
             value = self.config
             for part in parts:
                 if isinstance(value, dict) and part in value:
@@ -78,7 +78,7 @@ class YAMLPromptLoader:
                 else:
                     # Not a config reference, check context
                     return match.group(0) if ref not in context else str(context[ref])
-                    
+
             # If we found a config value, format it recursively
             if isinstance(value, str):
                 visited.add(ref)
@@ -86,40 +86,40 @@ class YAMLPromptLoader:
                 visited.remove(ref)
                 return result
             return str(value)
-            
+
         # Second pass: replace config references
         result = re.sub(r'\{([^}]+)\}', replace_ref, template)
-        
+
         # Third pass: simple format with context
         try:
             result = result.format(**context)
         except KeyError:
             # Some keys might be missing, that's OK for optional sections
             pass
-            
+
         return result
-        
+
     def get_template(self, path: str) -> str:
         """Get a template by dot-separated path"""
         parts = path.split('.')
         value = self.config
-        
+
         for part in parts:
             if isinstance(value, dict) and part in value:
                 value = value[part]
             else:
                 return ""
-                
+
         # Return the raw template string without formatting
         # This allows Jinja2 templates to be processed later with proper context
         if isinstance(value, str):
             return value
         return ""
-        
+
     def build_prompt_from_sections(self, sections: List[str], context: Dict[str, Any]) -> str:
         """Build a prompt from a list of sections"""
         formatted_sections = []
-        
+
         for section in sections:
             # Skip empty sections or those with missing required context
             if section.strip():
@@ -129,67 +129,67 @@ class YAMLPromptLoader:
                         formatted_sections.append(formatted)
                 except KeyError:
                     continue
-                    
+
         return "\n".join(formatted_sections)
 
 
 class PromptGenerator:
     """Generates context-aware prompts for agents and supervisors"""
-    
+
     def __init__(self, loader_or_config_path=None):
         """Initialize with YAMLPromptLoader or config path"""
         if isinstance(loader_or_config_path, YAMLPromptLoader):
             self.loader = loader_or_config_path
         else:
             self.loader = YAMLPromptLoader(loader_or_config_path)
-    
+
     def get_initial_prompt(self, *args, **kwargs):
         """Alias for generate_initial_todo_prompt"""
         return self.generate_initial_todo_prompt(*args, **kwargs)
-        
+
     def get_continuation_prompt(self, *args, **kwargs):
         """Alias for generate_continuation_prompt"""
         return self.generate_continuation_prompt(*args, **kwargs)
-    
+
     def generate_initial_todo_prompt(
-        self,
-        todos: List[str],
-        max_turns: int,
-        session_id: str = "unknown",
-        task_numbers: str = "",
-        project_root: str = None
-    ) -> str:
-        """Generate the initial prompt for the agent with TODOs"""
-        
-        context = {
-            'max_turns': max_turns,
-            'session_id': session_id,
-            'task_numbers': task_numbers if task_numbers else "N/A",
-            'project_root': project_root if project_root else os.getcwd()
-        }
-        
-        # Generate TODO list
-        todo_items = []
-        for i, todo in enumerate(todos, 1):
-            item = self.loader.format_template(
-                self.loader.config['todo_templates']['todo_item'],
-                {
-                    'number': i,
-                    'todo_text': todo
-                }
+            self,
+            context: ExecutionContext,
+            session_id: str = "unknown",
+            task_numbers: str = "",
+            project_root: str = None
+        ) -> str:
+            """Generate the initial prompt for the agent with TODOs"""
+
+            prompt_context = {
+                'max_turns': context.max_turns,
+                'session_id': session_id,
+                'task_numbers': task_numbers if task_numbers else "N/A",
+                'project_root': project_root if project_root else os.getcwd()
+            }
+
+            # Generate TODO list
+            todo_items = []
+            for i, todo in enumerate(context.todos, 1):
+                item = self.loader.format_template(
+                    self.loader.config['todo_templates']['todo_item'],
+                    {
+                        'number': i,
+                        'todo_text': todo
+                    }
+                )
+                todo_items.append(item)
+
+            todo_list_str = "\n".join(todo_items)
+            prompt_context['todo_list'] = self.loader.format_template(
+                self.loader.config['todo_templates']['todo_list'],
+                {'todo_items': todo_list_str}
             )
-            todo_items.append(item)
-            
-        todo_list_str = "\n".join(todo_items)
-        context['todo_list'] = self.loader.format_template(
-            self.loader.config['todo_templates']['todo_list'],
-            {'todo_items': todo_list_str}
-        )
-            
-        # Build initial prompt from sections
-        sections = self.loader.config['agent_prompts']['initial']['sections']
-        return self.loader.build_prompt_from_sections(sections, context)
-    
+
+            # Build initial prompt from sections
+            sections = self.loader.config['agent_prompts']['initial']['sections']
+            return self.loader.build_prompt_from_sections(sections, prompt_context)
+
+
     def _determine_continuation_type(self, supervisor_analysis: Dict[str, Any]) -> str:
         """Determine the type of continuation based on supervisor analysis"""
         if supervisor_analysis.get('all_complete', False):
@@ -223,10 +223,10 @@ class PromptGenerator:
         """Generate the task status section"""
         if not (context.completed_todos or context.remaining_todos):
             return ""
-            
+
         completed_summary = f"{len(context.completed_todos)} TODOs completed" if context.completed_todos else "No TODOs completed yet"
         remaining_summary = f"{len(context.remaining_todos)} TODOs remaining" if context.remaining_todos else "All TODOs complete"
-        
+
         return f"""=== TASK STATUS ===
 {completed_summary}
 {remaining_summary}
@@ -236,7 +236,7 @@ class PromptGenerator:
         """Generate the remaining TODOs section"""
         if not context.remaining_todos:
             return "=== NO REMAINING TODOS ===\nAll previous TODOs have been completed."
-            
+
         remaining_items = []
         for i, todo in enumerate(context.remaining_todos[:10], 1):
             item = self.loader.format_template(
@@ -247,7 +247,7 @@ class PromptGenerator:
                 }
             )
             remaining_items.append(item)
-        
+
         todo_list_str = "\n".join(remaining_items)
         return self.loader.format_template(
             self.loader.config['todo_templates']['todo_list'],
@@ -262,13 +262,13 @@ class PromptGenerator:
         """Generate the issues section"""
         if not context.issues_encountered:
             return ""
-            
+
         issue_list = "\n".join([f"⚠️  {issue}" for issue in context.issues_encountered[-3:]])
         return self.loader.format_template(
             self.loader.config['todo_templates']['issues_section'],
             {'issue_list': issue_list}
         )
-    
+
     def generate_continuation_prompt(
             self,
             context: ExecutionContext,
@@ -276,7 +276,7 @@ class PromptGenerator:
             supervisor_analysis: Dict[str, Any]
         ) -> str:
             """Generate continuation prompt for resumed execution"""
-            
+
             # Build prompt context with all sections
             prompt_context = {
                 'max_turns': context.max_turns,
@@ -289,12 +289,12 @@ class PromptGenerator:
                 'remaining_todos': self._generate_remaining_todos_section(context, supervisor_analysis),
                 'issues_section': self._generate_issues_section(context)
             }
-                
+
             # Build continuation prompt from sections
             sections = self.loader.config['agent_prompts']['continuation']['sections']
             return self.loader.build_prompt_from_sections(sections, prompt_context)
 
-    
+
     def generate_supervisor_analysis_prompt(
         self,
         execution_output: str,
@@ -302,22 +302,22 @@ class PromptGenerator:
         previous_executions: List[Dict]
     ) -> str:
         """Generate prompt for supervisor analysis"""
-        
+
         # Truncate output if too long
         max_output_chars = MAX_OUTPUT_TRUNCATE_LENGTH
         if len(execution_output) > max_output_chars:
             execution_output = (
-                execution_output[:max_output_chars//2] + 
-                "\n\n[... OUTPUT TRUNCATED ...]\n\n" + 
+                execution_output[:max_output_chars//2] +
+                "\n\n[... OUTPUT TRUNCATED ...]\n\n" +
                 execution_output[-max_output_chars//2:]
             )
-            
+
         prompt_context = {
             'max_turns': context.max_turns,
             'turns_used': 0,  # Will be set by supervisor
             'execution_output': execution_output
         }
-        
+
         # Add task progress if available
         if context.completed_todos or context.remaining_todos:
             prompt_context['task_progress'] = self.loader.format_template(
@@ -329,7 +329,7 @@ class PromptGenerator:
             )
         else:
             prompt_context['task_progress'] = ""
-            
+
         # Add execution history
         if previous_executions:
             history_items = []
@@ -342,18 +342,18 @@ class PromptGenerator:
                     }
                 )
                 history_items.append(item)
-                
+
             prompt_context['execution_history'] = self.loader.format_template(
                 self.loader.config['supervisor_prompts']['execution_history_template'],
                 {'history_items': "\n".join(history_items)}
             )
         else:
             prompt_context['execution_history'] = ""
-            
+
         # Build supervisor prompt from sections
         sections = self.loader.config['supervisor_prompts']['analysis']['sections']
         return self.loader.build_prompt_from_sections(sections, prompt_context)
-    
+
     def generate_final_summary(
         self,
         executions: List[Dict],
@@ -361,15 +361,15 @@ class PromptGenerator:
         total_turns: int
     ) -> str:
         """Generate a final summary for the user"""
-        
+
         duration_estimate = total_turns * SECONDS_PER_TURN_ESTIMATE
-        
+
         prompt_context = {
             'executions_count': len(executions),
             'total_turns': total_turns,
             'duration_minutes': duration_estimate // 60
         }
-        
+
         # Add completed tasks section
         if context.completed_todos:
             completed_list = "\n".join([f"✅ {todo}" for todo in context.completed_todos])
@@ -379,7 +379,7 @@ class PromptGenerator:
             )
         else:
             prompt_context['completed_section'] = ""
-            
+
         # Add incomplete tasks section
         if context.remaining_todos:
             incomplete_list = "\n".join([f"❌ {todo}" for todo in context.remaining_todos])
@@ -389,7 +389,7 @@ class PromptGenerator:
             )
         else:
             prompt_context['incomplete_section'] = ""
-            
+
         # Add execution progression
         progression_lines = []
         for i, exec in enumerate(executions, 1):
@@ -398,7 +398,7 @@ class PromptGenerator:
                 f"{status} Execution {i}: {exec.get('summary', 'No summary')}"
             )
         prompt_context['execution_progression'] = "\n".join(progression_lines)
-        
+
         # Add recommendations if tasks remain
         if context.remaining_todos:
             focus_items = "\n".join([f"- {todo}" for todo in context.remaining_todos[:3]])
@@ -408,7 +408,7 @@ class PromptGenerator:
             )
         else:
             prompt_context['recommendations'] = ""
-            
+
         # Format the complete summary
         return self.loader.format_template(
             self.loader.config['final_summary']['template'],
@@ -418,8 +418,8 @@ class PromptGenerator:
 
 class TodoPromptManager:
     """Manages prompts for TODO-based execution"""
-    
-    def __init__(self, todos: List[str], max_turns: int, 
+
+    def __init__(self, todos: List[str], max_turns: int,
                  config_path: Optional[str] = None):
         self.context = ExecutionContext(
             todos=todos,
@@ -429,26 +429,26 @@ class TodoPromptManager:
         self.generator = PromptGenerator(config_path)
         self.session_id = "unknown"
         self.task_numbers = ""
-        
+
     def update_progress(self, completed_todos: List[str], remaining_todos: List[str]):
         """Update execution progress"""
         self.context.completed_todos = completed_todos
         self.context.remaining_todos = remaining_todos
-        
+
     def add_issue(self, issue: str):
         """Add an issue encountered during execution"""
         self.context.issues_encountered.append(issue)
-        
+
     def get_initial_prompt(self) -> str:
-        """Get the initial agent prompt with TODOs"""
-        return self.generator.generate_initial_todo_prompt(
-            todos=self.context.todos,
-            max_turns=self.context.max_turns,
-            session_id=self.session_id,
-            task_numbers=self.task_numbers
-        )
-        
-    def get_continuation_prompt(self, analysis_guidance: str, continuation_context: str, 
+            """Get the initial agent prompt with TODOs"""
+            return self.generator.generate_initial_todo_prompt(
+                context=self.context,
+                session_id=self.session_id,
+                task_numbers=self.task_numbers
+            )
+
+
+    def get_continuation_prompt(self, analysis_guidance: str, continuation_context: str,
                                supervisor_analysis: Dict[str, Any]) -> str:
         """Get continuation prompt for resumed execution"""
         self.context.continuation_context = continuation_context
@@ -457,7 +457,7 @@ class TodoPromptManager:
             analysis_guidance=analysis_guidance,
             supervisor_analysis=supervisor_analysis
         )
-        
+
     def get_supervisor_prompt(self, execution_output: str, previous_executions: List[Dict]) -> str:
         """Get supervisor analysis prompt"""
         return self.generator.generate_supervisor_analysis_prompt(
@@ -465,13 +465,13 @@ class TodoPromptManager:
             context=self.context,
             previous_executions=previous_executions
         )
-        
-    
-        
+
+
+
     def add_guidance(self, guidance: str):
         """Add guidance to history"""
         self.context.previous_guidance.append(guidance)
-        
+
     def get_final_summary(self, executions: List[Dict], total_turns: int) -> str:
         """Get final summary for the user"""
         return self.generator.generate_final_summary(
