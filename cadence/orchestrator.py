@@ -152,7 +152,14 @@ class SupervisorOrchestrator:
                     json_data = json.loads(line_str)
                     msg_type = json_data.get('type', 'unknown')
 
-                    if msg_type == 'assistant':
+                    if msg_type == 'system':
+                        subtype = json_data.get('subtype', '')
+                        if subtype == 'init':
+                            # Extract and display model info from init message
+                            model = json_data.get('model', 'unknown')
+                            print(f"{color}[{process_name}]{Colors.RESET} {Colors.BOLD}Model: {model}{Colors.RESET}")
+
+                    elif msg_type == 'assistant':
                         message = json_data.get('message', {})
                         content = message.get('content', [])
 
@@ -207,6 +214,11 @@ class SupervisorOrchestrator:
 
             # Handle different message types
             if msg_type == 'system':
+                subtype = data.get('subtype', '')
+                if subtype == 'init':
+                    # Extract model info from init message
+                    model = data.get('model', 'unknown')
+                    return f"[SYSTEM] Initialized with model: {model}"
                 return f"[SYSTEM] {data.get('message', '')}"
             elif msg_type == 'assistant':
                 message = data.get('message', {})
@@ -301,6 +313,25 @@ class SupervisorOrchestrator:
         logger.info("Starting Claude Cadence Orchestration")
         logger.info(f"Task file: {self.task_file}")
         logger.info(f"Session ID: {self.current_session_id}")
+        logger.info("="*60)
+
+        # Display key configuration values
+        logger.info("Configuration:")
+        logger.info(f"  Supervisor model: {self.config.get('supervisor', {}).get('model', 'NOT SET')}")
+        logger.info(f"  Agent model: {self.config.get('agent', {}).get('model', 'NOT SET')}")
+        logger.info(f"  Max turns per agent: {self.config.get('execution', {}).get('max_turns', 'NOT SET')}")
+        logger.info(f"  Agent timeout: {self.config.get('execution', {}).get('timeout', 'NOT SET')}s")
+        logger.info(f"  Max orchestration iterations: {self.config.get('orchestration', {}).get('max_iterations', 100)}")
+        logger.info(f"  Code review frequency: {self.config.get('zen_integration', {}).get('code_review_frequency', 'NOT SET')}")
+
+        # Display MCP servers if configured
+        mcp_servers = self.config.get('integrations', {}).get('mcp', {})
+        if mcp_servers:
+            supervisor_servers = mcp_servers.get('supervisor_servers', [])
+            agent_servers = mcp_servers.get('agent_servers', [])
+            logger.info(f"  Supervisor MCP servers: {', '.join(supervisor_servers) if supervisor_servers else 'None'}")
+            logger.info(f"  Agent MCP servers: {', '.join(agent_servers) if agent_servers else 'None'}")
+
         logger.info("="*60)
 
         # CRITICAL: Clean up all old session files from previous runs
@@ -618,8 +649,14 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                     all_tools = basic_tools + mcp_tools
 
                     # Get supervisor model from config
-                    supervisor_model = self.config.get("supervisor", {}).get("model", "claude-sonnet-4-latest")
-                    logger.info(f"Using supervisor model: {supervisor_model}")
+                    supervisor_config = self.config.get("supervisor")
+                    if not supervisor_config:
+                        raise ValueError("Supervisor configuration not found in config")
+
+                    supervisor_model = supervisor_config.get("model")
+                    if not supervisor_model:
+                        raise ValueError("Supervisor model not specified in config")
+
 
                     cmd = [
                         "claude",
@@ -878,8 +915,14 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                     f.write(prompt)
 
                 # Get agent model from config
-                agent_model = self.config.get("agent", {}).get("model", "claude-sonnet-4-latest")
-                logger.info(f"Using agent model: {agent_model}")
+                agent_config = self.config.get("agent")
+                if not agent_config:
+                    raise ValueError("Agent configuration not found in config")
+
+                agent_model = agent_config.get("model")
+                if not agent_model:
+                    raise ValueError("Agent model not specified in config")
+
 
                 # Build claude command
                 cmd = ["claude"]

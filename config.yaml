@@ -19,7 +19,7 @@ execution:
 # Agent configuration
 agent:
   # Model to use for the main agent execution
-  model: "claude-sonnet-4-latest"  # Updated to Sonnet 4
+  model: "claude-sonnet-4-20250514"  # Use model alias for latest Sonnet
   # Tools available to the agent
   # Comment out any tools you want to disable
   tools:
@@ -39,9 +39,8 @@ agent:
 # Supervisor configuration
 supervisor:
   # Model to use for checkpoint analysis
-  # Options: "claude-3-opus-latest", "claude-3-5-sonnet-20241022", "claude-opus-4-20250514"
-  # model: "claude-sonnet-4-20250514"
-  model: claude-sonnet-4-latest
+  # Options: "opus", "sonnet", or full names like "claude-sonnet-4-20250514"
+  model: "claude-sonnet-4-20250514"  # Use model alias for latest Sonnet
   # Tools available to the supervisor
   tools:
     - bash
