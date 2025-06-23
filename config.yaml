@@ -41,9 +41,9 @@ agent:
 # Supervisor configuration
 supervisor:
   # Model to use for checkpoint analysis
-  # Options: "heuristic" (built-in), "claude-3-opus-latest", "claude-3-5-sonnet-20241022", "claude-opus-4-20250514"
-  # model: "claude-sonnet-4-20250514"  # Updated to Sonnet 4 to match agent
-  model: claude-3-opus-latest
+  # Options: "claude-3-opus-latest", "claude-3-5-sonnet-20241022", "claude-opus-4-20250514"
+  # model: "claude-sonnet-4-20250514"
+  model: claude-sonnet-4-latest
   # Tools available to the supervisor
   tools:
     - bash
@@ -114,7 +114,7 @@ integrations:
     process_subtasks: true
     # How to group subtasks for execution
     subtask_grouping: "by_task"  # "by_task" or "by_priority"
-  
+
   # MCP (Model Context Protocol) settings
   mcp:
     # Supervisor MCP servers (will add mcp__<server>__* automatically)
@@ -123,7 +123,7 @@ integrations:
       - "zen"            # Code review and assistance
       - "serena"         # Semantic code analysis
       - "Context7"       # Library documentation
-    
+
     # Agent MCP servers (will add mcp__<server>__* automatically)
     agent_servers:
       - "taskmaster-ai"  # Task management (agent can now update its own tasks)

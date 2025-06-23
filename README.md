@@ -16,8 +16,8 @@ Claude Cadence provides a framework for managing Claude Code agents through task
 - **Safety Limits**: Maximum turn limits prevent runaway execution
 - **Progress Tracking**: Monitor task completion and execution status via scratchpad files
 - **Flexible Configuration**: YAML-based configuration for all settings
-- **Enhanced Prompts**: Comprehensive agent context with safety-first design
-- **Continuation Support**: Dynamic prompts for resumed execution with full context preservation
+- **YAML-Based Prompts**: Unified prompt generation with Jinja2 conditional logic
+- **Intelligent Continuation**: Dynamic prompts adapt to execution state, retries, and completion status
 - **Zen MCP Integration**: Intelligent assistance when agents need help
   - Automatic stuck detection and debugging support
   - Code review and validation for critical tasks
@@ -79,14 +79,16 @@ Claude Cadence implements a supervisor-agent pattern where:
 
 This ensures agents focus on completing work rather than managing execution windows.
 
-### Prompt System
+### YAML-Based Prompt System
 
-The prompt system prioritizes safety and reliability:
+Claude Cadence uses a sophisticated YAML-based prompt system with Jinja2 templating:
 
-- **Full Context Preservation**: Every continuation includes complete agent context
-- **Scratchpad Tracking**: Agents maintain progress in `.cadence/scratchpad/` files
-- **Dynamic Adaptation**: Prompts adjust based on completion status and issues
-- **Safety-First Design**: Explicit warnings about `--dangerously-skip-permissions`
+- **Unified Architecture**: All prompts generated from `cadence/prompts.yaml` using Jinja2 conditional logic
+- **Context Preservation**: Complete agent state carried through continuation prompts
+- **Dynamic Variables**: Template variables adapt based on execution state and completion status
+- **Scratchpad Integration**: Agent progress tracked in `.cadence/scratchpad/` files
+- **Safety-First Design**: Built-in warnings and permission handling
+- **Conditional Logic**: Different prompt flows based on task status, errors, and retry attempts
 
 ### Zen Integration
 
@@ -117,39 +119,20 @@ The supervisor automatically calls zen when:
 
 ## Configuration
 
-Configuration is managed through `config.yaml`:
-
-```yaml
-execution:
-  max_turns: 40         # Safety limit, not a target
-  timeout: 600          # Execution timeout in seconds
-  
-agent:
-  model: "claude-3-5-sonnet-20241022"
-  tools: ["bash", "read", "write", "edit", ...]
-  
-task_detection:
-  completion_phrase: "ALL TASKS COMPLETE"
-  help_needed_phrase: "HELP NEEDED"
-  stuck_status_phrase: "Status: STUCK"
-  
-zen_integration:
-  output_lines_limit: 200     # Lines to include in zen context
-  scratchpad_check_lines: 10  # Lines to check for help requests
-  auto_debug_error_threshold: 3
-  
-processing:
-  thread_join_timeout: 5      # Thread cleanup timeout
-  status_check_interval: 30   # Progress check interval
-  max_output_truncate_length: 3000
-```
-
-See `config.yaml` for all configuration options.
+Configuration is managed through `config.yaml`. See the file for all available options including execution settings, model configuration, MCP integrations, and prompt customization.
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) - System design details
-- [Configuration](docs/configuration.md) - Configuration options
+- **[Prompt System Guide](docs/architecture/claude_cadence_prompt_system_guide.md)** - **Complete prompt system reference**
+  - Comprehensive guide to the YAML-based prompt architecture
+  - Jinja2 conditional logic and template resolution
+  - Iteration-by-iteration supervisor-agent communication flow
+  - Variable dependency chains and context preservation
+  - Scratchpad creation system and retry mechanisms
+  - Task Master and Zen MCP integration points
+  - Troubleshooting guide for prompt development
+  - Essential reference for understanding and modifying the prompt system
+- [Development Documentation](docs/development/) - TODOs, code review findings, and agent documentation
 - [Examples](examples/) - Usage examples
 
 ## Requirements
@@ -165,7 +148,7 @@ MIT License - see LICENSE file for details
 
 ## Development
 
-See [TODO.md](TODO.md) for planned improvements and known issues.
+See [docs/development/TODO.md](docs/development/TODO.md) for planned improvements and known issues.
 
 ## Contributing
 

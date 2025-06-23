@@ -52,7 +52,7 @@ Both tools:
 - Return mock responses (need actual implementation) ❌
 - Need integration with the orchestrator feedback loop ❌
 
-**TODO**: 
+**TODO**:
 1. Implement actual MCP calls for `_zen_consensus()` and `_zen_review()`
 2. Update orchestrator to handle `zen_assistance` action properly (currently just logs warning)
 3. Create feedback mechanism to pass Zen guidance to agent in next iteration
@@ -138,3 +138,14 @@ Both tools:
 - The `setup_logging` function is duplicated in both files
 - Move to `cadence/utils.py` or create new `cadence/logging_utils.py`
 - Follows DRY principle and simplifies future logging changes
+
+## Future Enhancements
+
+### 16. Add Claude API Cost Tracking (Future Version)
+**Potential Integration**: Consider adding cost tracking for Claude API usage
+- Could use `tokencost` Python package for accurate token counting and pricing
+- Track costs for Claude models only (since Claude Code is Anthropic-only)
+- Provide cost summaries after orchestration runs for supervisor and agent calls
+- Make it optional/configurable for users who want cost visibility
+- Note: Not needed for users with Claude subscriptions, but useful for API key users
+- Zen tool costs would be separate and not tracked by cadence

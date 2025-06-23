@@ -6,7 +6,7 @@
 - ~~USES BASIC STRING SEARCH FOR `{` AND `}`~~
 - ~~WILL BREAK IF SUPERVISOR OUTPUTS EXAMPLES OR MULTIPLE JSON OBJECTS~~
 - **FIXED**: NOW USES REGEX PATTERN MATCHING WITH RETRY MECHANISM
-- **IMPLEMENTATION**: 
+- **IMPLEMENTATION**:
   - Tries regex pattern first: `r'\{[^{}]*"action"[^{}]*\}'`
   - Falls back to original method if regex fails
   - Retries up to 5 times with --continue flag if JSON parsing fails
