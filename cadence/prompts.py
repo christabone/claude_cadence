@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 import yaml
 import re
+import os
 from jinja2 import Template
 
 # Output processing constants
@@ -155,14 +156,16 @@ class PromptGenerator:
         todos: List[str],
         max_turns: int,
         session_id: str = "unknown",
-        task_numbers: str = ""
+        task_numbers: str = "",
+        project_root: str = None
     ) -> str:
         """Generate the initial prompt for the agent with TODOs"""
         
         context = {
             'max_turns': max_turns,
             'session_id': session_id,
-            'task_numbers': task_numbers if task_numbers else "N/A"
+            'task_numbers': task_numbers if task_numbers else "N/A",
+            'project_root': project_root if project_root else os.getcwd()
         }
         
         # Generate TODO list

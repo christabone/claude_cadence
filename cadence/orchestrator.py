@@ -21,10 +21,9 @@ import threading
 import asyncio
 
 from .constants import OrchestratorDefaults, FilePatterns, AgentPromptDefaults
-from .prompt_utils import PromptBuilder
 from .utils import generate_session_id
 from .config import ZenIntegrationConfig
-from .prompts import YAMLPromptLoader
+from .prompts import YAMLPromptLoader, PromptGenerator
 from .log_utils import Colors
 
 # Set up logging
@@ -1002,19 +1001,67 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                           task_id: str = None, subtasks: List[Dict] = None, 
                           project_root: str = None) -> str:
         """Build prompt for agent with TODOs and guidance"""
-        # Check if guidance includes Zen assistance
-        if "zen assistance" in guidance.lower() or "expert assistance" in guidance.lower():
-            zen_reminder = self.prompt_loader.get_template("agent_zen_reminder")
-            guidance = guidance + zen_reminder
-            
-        return PromptBuilder.build_agent_prompt(
+        # Create a PromptGenerator instance
+        prompt_generator = PromptGenerator(self.prompt_loader)
+        
+        # Generate the initial prompt with proper YAML templates
+        base_prompt = prompt_generator.generate_initial_todo_prompt(
             todos=todos,
-            guidance=guidance,
             max_turns=self.config.get("max_turns", OrchestratorDefaults.MAX_AGENT_TURNS),
-            task_id=task_id,
-            subtasks=subtasks,
-            project_root=project_root
+            session_id=self.current_session_id if hasattr(self, 'current_session_id') else "unknown",
+            task_numbers=str(task_id) if task_id else "",
+            project_root=project_root or str(self.project_root)
         )
+        
+        # Add supervisor guidance if provided
+        if guidance:
+            guidance_section = f"\n=== SUPERVISOR GUIDANCE ===\n{guidance}\n"
+            # Check if guidance includes Zen assistance
+            if "zen assistance" in guidance.lower() or "expert assistance" in guidance.lower():
+                zen_reminder = self.prompt_loader.get_template("agent_zen_reminder")
+                guidance_section += zen_reminder
+            
+            # Insert guidance after the context but before the TODOs
+            # Find the TODO list section
+            todo_marker = "=== YOUR TODOS ==="
+            if todo_marker in base_prompt:
+                parts = base_prompt.split(todo_marker)
+                base_prompt = parts[0] + guidance_section + todo_marker + parts[1]
+            else:
+                # Fallback: append at end
+                base_prompt += guidance_section
+        
+        # Add Task Master information if provided
+        if task_id and subtasks and project_root:
+            task_master_info = f"\n=== TASK MASTER INFORMATION ===\nYou are working on Task {task_id} with the following subtasks:\n\n"
+            for subtask in subtasks:
+                task_master_info += f"- Subtask {subtask['id']}: {subtask['title']}\n"
+                if subtask.get('description'):
+                    task_master_info += f"  Description: {subtask['description']}\n"
+            
+            task_master_info += f"\nProject Root: {project_root}\n\n"
+            task_master_info += f"IMPORTANT: You have access to Task Master MCP tools. You should:\n"
+            task_master_info += f"1. Update subtask status as you complete each one using:\n"
+            task_master_info += f"   mcp__taskmaster-ai__set_task_status --id=<subtask_id> --status=in-progress --projectRoot={project_root}\n"
+            task_master_info += f"   mcp__taskmaster-ai__set_task_status --id=<subtask_id> --status=done --projectRoot={project_root}\n"
+            task_master_info += f"2. Add implementation notes to subtasks as needed:\n"
+            task_master_info += f"   mcp__taskmaster-ai__update_subtask --id=<subtask_id> --prompt=\"implementation notes...\" --projectRoot={project_root}\n\n"
+            
+            # Insert Task Master info at the beginning after supervised context
+            context_marker = "=== SUPERVISED AGENT CONTEXT ==="
+            if context_marker in base_prompt:
+                parts = base_prompt.split(context_marker)
+                # Find the end of the supervised context section
+                end_of_context = parts[1].find("\n===")
+                if end_of_context > 0:
+                    base_prompt = parts[0] + context_marker + parts[1][:end_of_context] + task_master_info + parts[1][end_of_context:]
+                else:
+                    base_prompt = parts[0] + context_marker + parts[1] + task_master_info
+            else:
+                # Fallback: prepend
+                base_prompt = task_master_info + base_prompt
+        
+        return base_prompt
 
 
     
