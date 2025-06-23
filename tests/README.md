@@ -98,7 +98,7 @@ pytest tests/ -v
 # Supervisor logs
 ls .cadence/supervisor/
 
-# Agent scratchpads  
+# Agent scratchpads
 ls .cadence/scratchpad/
 
 # Execution logs
@@ -123,10 +123,10 @@ class TestNewFeature:
     def test_feature_behavior(self, mock_config):
         # Arrange
         supervisor = TaskSupervisor(config=mock_config)
-        
+
         # Act
         result = supervisor.some_method()
-        
+
         # Assert
         assert result == expected_value
 ```
@@ -139,14 +139,14 @@ def test_new_e2e_scenario(self, e2e_config, e2e_temp_dir):
         subprocess.run(["claude", "--version"], capture_output=True, check=True)
     except (FileNotFoundError, subprocess.CalledProcessError):
         pytest.skip("Claude CLI not available")
-        
+
     # Create TODOs
     todos = ["Task 1", "Task 2"]
-    
+
     # Execute
     supervisor = TaskSupervisor(config=e2e_config)
     result = supervisor.execute_with_todos(todos, session_id="test_id")
-    
+
     # Assert
     assert result.success is True
 ```

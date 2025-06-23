@@ -15,12 +15,12 @@ from cadence import TaskSupervisor
 def main():
     # Create supervisor with default settings
     supervisor = TaskSupervisor(verbose=True)
-    
+
     # Example 1: Run with Task Master integration
     print("=== Example 1: Task Master Integration ===")
     success = supervisor.run_with_taskmaster()
     print(f"Task Master execution completed: {success}")
-    
+
     # Example 2: Run with manual TODOs
     print("\n=== Example 2: Manual TODOs ===")
     todos = [
@@ -29,11 +29,11 @@ def main():
         "Write unit tests with edge cases",
         "Add type hints"
     ]
-    
+
     result = supervisor.execute_with_todos(todos=todos)
     print(f"Manual TODO execution completed: {result.task_complete}")
     print(f"Turns used: {result.turns_used}")
-    
+
     # Example 3: Custom configuration
     print("\n=== Example 3: Custom Configuration ===")
     custom_supervisor = TaskSupervisor(
@@ -41,7 +41,7 @@ def main():
         model="claude-3-opus-latest",  # Different model
         verbose=True
     )
-    
+
     todos = ["Refactor the codebase to use async/await patterns"]
     result = custom_supervisor.execute_with_todos(todos=todos)
     print(f"Custom execution completed: {result.task_complete}")

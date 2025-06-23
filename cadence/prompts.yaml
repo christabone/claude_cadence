@@ -521,7 +521,7 @@ supervisor_prompts:
       9. CRITICAL - PROJECT COMPLETION:
          When ALL Task Master tasks show status "done" AND no tasks remain:
          - IMPORTANT: If you just updated the last task to "done", wait for code review first
-         - Only after all reviews pass (see CODE REVIEW INSTRUCTIONS):
+         - Only after all reviews pass (see CODE REVIEW INSTRUCTIONS for both task AND project level):
            - Set action to "complete"
          - Create a completion marker file: .cadence/project_complete.marker
          - Write to the file:
@@ -561,11 +561,13 @@ supervisor_prompts:
       project: |
 
         CODE REVIEW INSTRUCTIONS:
-        IMPORTANT: Only proceed with project-level review after:
+        IMPORTANT: This project-level review MUST be run when:
         1. The agent has completed work on the LAST task's subtasks
         2. You've verified the agent's scratchpad shows "ALL TASKS COMPLETE"
+        3. All Task Master tasks show status "done"
+        4. You are about to return action: "complete"
 
-        If all project tasks are complete (you would return action: "complete"):
+        If all project tasks are complete (BEFORE returning action: "complete"):
         1. First do YOUR OWN comprehensive project review:
            * Review the overall project structure and organization
            * Verify all tasks have been properly implemented

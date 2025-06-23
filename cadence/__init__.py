@@ -16,7 +16,7 @@ __version__ = "0.1.0"
 __all__ = [
     "TaskSupervisor",
     "ExecutionResult",
-    "ConfigLoader", 
+    "ConfigLoader",
     "CadenceConfig",
     "TaskManager",
     "Task",

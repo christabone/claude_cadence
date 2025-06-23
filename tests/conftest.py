@@ -47,7 +47,7 @@ def mock_task_file(temp_dir):
     """Create a mock task file for testing"""
     task_file = temp_dir / ".taskmaster" / "tasks" / "tasks.json"
     task_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
     tasks = [
         {
             "id": "1",
@@ -56,16 +56,16 @@ def mock_task_file(temp_dir):
             "status": "pending"
         },
         {
-            "id": "2", 
+            "id": "2",
             "title": "Test Task 2",
             "description": "Second test task",
             "status": "pending"
         }
     ]
-    
+
     with open(task_file, 'w') as f:
         json.dump({"tasks": tasks}, f)
-        
+
     return task_file
 
 
@@ -93,22 +93,22 @@ def mock_subprocess(mock_claude_response):
         mock_process = MagicMock()
         mock_process.returncode = mock_claude_response["exit_code"]
         mock_process.poll.side_effect = [None] * 3 + [0]  # Running, then done
-        
+
         # Mock stdout
         mock_stdout = MagicMock()
         output_lines = [line + '\n' for line in mock_claude_response["output"]]
         mock_stdout.readline.side_effect = output_lines + ['']
-        
+
         # Mock stderr
         mock_stderr = MagicMock()
         error_lines = [line + '\n' for line in mock_claude_response["errors"]]
         mock_stderr.readline.side_effect = error_lines + ['']
-        
+
         mock_process.stdout = mock_stdout
         mock_process.stderr = mock_stderr
-        
+
         mock_popen.return_value = mock_process
-        
+
         yield mock_popen
 
 
@@ -123,13 +123,13 @@ def mock_scratchpad(temp_dir):
     """Create a mock scratchpad file"""
     scratchpad_dir = temp_dir / ".cadence" / "scratchpad"
     scratchpad_dir.mkdir(parents=True, exist_ok=True)
-    
+
     def create_scratchpad(session_id, content):
         scratchpad_file = scratchpad_dir / f"session_{session_id}.md"
         with open(scratchpad_file, 'w') as f:
             f.write(content)
         return scratchpad_file
-        
+
     return create_scratchpad
 
 
@@ -155,10 +155,10 @@ def clean_env(monkeypatch):
     ]
     for var in env_vars_to_remove:
         monkeypatch.delenv(var, raising=False)
-        
+
     # Set test environment
     monkeypatch.setenv('CLAUDE_CADENCE_TEST', '1')
-    
+
 
 # Async fixtures for E2E tests
 @pytest.fixture
@@ -174,23 +174,23 @@ def capture_logs():
     """Capture logs during tests"""
     import logging
     from io import StringIO
-    
+
     log_capture = StringIO()
     handler = logging.StreamHandler(log_capture)
     handler.setLevel(logging.DEBUG)
-    
+
     # Get all cadence loggers
     loggers = [
         logging.getLogger('cadence'),
         logging.getLogger('cadence.supervisor')
     ]
-    
+
     for logger in loggers:
         logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)
-        
+
     yield log_capture
-    
+
     # Cleanup
     for logger in loggers:
         logger.removeHandler(handler)

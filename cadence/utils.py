@@ -11,10 +11,10 @@ from datetime import datetime
 def generate_session_id() -> str:
     """
     Generate a unique session ID with timestamp and UUID.
-    
+
     Format: YYYYMMDD_HHMMSS_[8-char-uuid]
     Example: 20240103_143022_a1b2c3d4
-    
+
     Returns:
         str: A unique session identifier
     """

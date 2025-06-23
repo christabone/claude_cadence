@@ -47,7 +47,7 @@ class AgentConfig:
     """Agent execution configuration"""
     model: str = "claude-3-5-sonnet-20241022"
     tools: List[str] = field(default_factory=lambda: [
-        "bash", "read", "write", "edit", "grep", "glob", "search", 
+        "bash", "read", "write", "edit", "grep", "glob", "search",
         "todo_read", "todo_write", "mcp"
     ])
     extra_flags: List[str] = field(default_factory=lambda: ["--dangerously-skip-permissions"])
@@ -61,12 +61,12 @@ class ZenIntegrationConfig:
     auto_debug_threshold: int = 3  # Number of errors before calling zen
     cutoff_detection: bool = True  # Detect if task was cut off at turn limit
     code_review_frequency: str = "task"  # "none", "task", "project"
-    
+
     # Selective task validation patterns
     validate_on_complete: List[str] = field(default_factory=lambda: [
         "*security*", "*database*", "*critical*", "*auth*", "*payment*"
     ])
-    
+
     # Model configurations for different scenarios
     models: Dict[str, List[str]] = field(default_factory=lambda: {
         "debug": ["o3", "pro"],           # For stuck/errors
@@ -75,11 +75,11 @@ class ZenIntegrationConfig:
         "precommit": ["pro"],             # For validation
         "analyze": ["pro"]                # For retrospectives
     })
-    
+
     # Thinking modes for each model type
     thinking_modes: Dict[str, str] = field(default_factory=lambda: {
         "debug": "high",
-        "review": "high", 
+        "review": "high",
         "consensus": "medium",
         "precommit": "high",
         "analyze": "medium"
@@ -172,7 +172,7 @@ class CadenceConfig:
 
 class ConfigLoader:
     """Loads and manages Cadence configuration"""
-    
+
     DEFAULT_CONFIG_PATHS = [
         Path.cwd() / "cadence.yaml",
         Path.cwd() / "config.yaml",
@@ -180,18 +180,18 @@ class ConfigLoader:
         Path.home() / ".config" / "claude-cadence" / "config.yaml",
         Path(__file__).parent.parent / "config.yaml"
     ]
-    
+
     def __init__(self, config_path: Optional[str] = None):
         """
         Initialize config loader
-        
+
         Args:
             config_path: Optional path to config file. If not provided,
                         searches default locations.
         """
         self.config_path = self._find_config_file(config_path)
         self.config = self._load_config()
-        
+
     def _find_config_file(self, config_path: Optional[str]) -> Optional[Path]:
         """Find configuration file"""
         if config_path:
@@ -199,81 +199,81 @@ class ConfigLoader:
             if path.exists():
                 return path
             raise FileNotFoundError(f"Config file not found: {config_path}")
-            
+
         # Check environment variable
         env_path = os.environ.get("CADENCE_CONFIG")
         if env_path:
             path = Path(env_path)
             if path.exists():
                 return path
-                
+
         # Check default locations
         for path in self.DEFAULT_CONFIG_PATHS:
             if path.exists():
                 return path
-                
+
         return None
-        
+
     def _load_config(self) -> CadenceConfig:
         """Load configuration from file or use defaults"""
         if not self.config_path:
             return CadenceConfig()
-            
+
         try:
             with open(self.config_path, 'r') as f:
                 data = yaml.safe_load(f) or {}
-                
+
             # Parse nested configs
             config = CadenceConfig()
-            
+
             # Execution config
             if 'execution' in data:
                 config.execution = ExecutionConfig(**data['execution'])
-                
+
             # Agent config
             if 'agent' in data:
                 config.agent = AgentConfig(**data['agent'])
-                
+
             # Supervisor config
             if 'supervisor' in data:
                 config.supervisor = SupervisorConfig(**data['supervisor'])
-                
+
             # Task detection config
             if 'task_detection' in data:
                 config.task_detection = TaskDetectionConfig(**data['task_detection'])
-                
+
             # Direct dictionary configs
             for key in ['session', 'integrations', 'prompts', 'zen_integration', 'processing', 'development']:
                 if key in data:
                     setattr(config, key, data[key])
-                    
+
             return config
-            
+
         except Exception as e:
             print(f"Warning: Failed to load config from {self.config_path}: {e}")
             print("Using default configuration")
             return CadenceConfig()
-            
+
     def get_tool_command_flags(self) -> List[str]:
         """Get tool-related command line flags for claude CLI"""
         flags = []
-        
+
         # Add tool flags
         for tool in self.config.agent.tools:
             flags.extend(["--tool", tool])
-            
+
         # Add extra flags
         flags.extend(self.config.agent.extra_flags)
-        
+
         return flags
-        
-        
+
+
     def save(self, path: Optional[str] = None):
         """Save current configuration to file"""
         save_path = Path(path) if path else self.config_path
         if not save_path:
             save_path = Path.cwd() / "cadence.yaml"
-            
+
         # Convert to dictionary
         data = {
             "execution": self.config.execution.__dict__,
@@ -285,18 +285,18 @@ class ConfigLoader:
             "prompts": self.config.prompts,
             "development": self.config.development
         }
-        
+
         save_path.parent.mkdir(parents=True, exist_ok=True)
         with open(save_path, 'w') as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-            
+
     def override_from_args(self, **kwargs):
         """Override config values from command line arguments"""
         # Handle nested overrides
         for key, value in kwargs.items():
             if value is None:
                 continue
-                
+
             if '.' in key:
                 # Nested key like "checkpoint.turns"
                 parts = key.split('.')

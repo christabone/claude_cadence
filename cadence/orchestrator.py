@@ -581,9 +581,24 @@ class SupervisorOrchestrator:
                         logger.warning("Supervisor prompt TASK section unclear - check template rendering")
 
                     # Get code review section based on config
-                    code_review_key = f"supervisor_prompts.orchestrator_taskmaster.code_review_sections.{code_review_frequency}"
-                    code_review_section = self.prompt_loader.get_template(code_review_key)
-                    code_review_section = self.prompt_loader.format_template(code_review_section, context)
+                    # When code_review_frequency is "task", we should ALSO include project review
+                    # instructions so the supervisor knows to run final review before completion
+                    if code_review_frequency == "task":
+                        # Include BOTH task-level and project-level review instructions
+                        task_review_key = "supervisor_prompts.orchestrator_taskmaster.code_review_sections.task"
+                        task_review_section = self.prompt_loader.get_template(task_review_key)
+                        task_review_section = self.prompt_loader.format_template(task_review_section, context)
+
+                        project_review_key = "supervisor_prompts.orchestrator_taskmaster.code_review_sections.project"
+                        project_review_section = self.prompt_loader.get_template(project_review_key)
+                        project_review_section = self.prompt_loader.format_template(project_review_section, context)
+
+                        code_review_section = task_review_section + project_review_section
+                    else:
+                        # For "project" or "none" frequency, use only the specified section
+                        code_review_key = f"supervisor_prompts.orchestrator_taskmaster.code_review_sections.{code_review_frequency}"
+                        code_review_section = self.prompt_loader.get_template(code_review_key)
+                        code_review_section = self.prompt_loader.format_template(code_review_section, context)
 
                     # Get zen guidance
                     zen_guidance = self.prompt_loader.get_template("supervisor_prompts.orchestrator_taskmaster.zen_guidance")

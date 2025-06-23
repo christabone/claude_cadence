@@ -36,46 +36,46 @@ class ZenRequest:
 
 class ZenIntegration:
     """Manages integration with zen MCP tools for supervisor assistance"""
-    
+
     def __init__(self, config: ZenIntegrationConfig, verbose: bool = False):
         """Initialize zen integration with configuration"""
         self.config = config
         self.verbose = verbose
         self.error_counts = {}  # Track errors per session
-        
+
     def should_call_zen(self, result, context, session_id: str) -> Optional[Tuple[str, str]]:
         """
         Determine if zen assistance is needed based on execution results
-        
+
         Returns:
             Tuple of (tool_name, reason) if zen should be called, None otherwise
         """
         if not self.config.enabled:
             return None
-            
+
         # Check for explicit help requests
         if self.config.stuck_detection:
             stuck_status = self._detect_stuck_status(result, session_id)
             if stuck_status:
                 return "debug", stuck_status
-                
+
         # Check for repeated errors
         error_pattern = self._detect_error_pattern(result, session_id)
         if error_pattern:
             return "debug", error_pattern
-            
+
         # Check if task requires validation
         if hasattr(context, 'current_task'):
             validation_needed = self._task_requires_validation(context.current_task)
             if validation_needed:
                 return "precommit", f"Critical task validation: {validation_needed}"
-                
+
         # Check if task was likely cut off (needs retrospective)
         if self._detect_cutoff(result, context):
             return "analyze", "Task appears to have been cut off at turn limit"
-                
+
         return None
-        
+
     def _detect_stuck_status(self, result, session_id: str) -> Optional[str]:
         """Check if agent reported being stuck"""
         # Check scratchpad for STUCK status
@@ -87,7 +87,7 @@ class ZenIntegration:
                 match = re.search(r'Issue: (.+?)(?:\n|$)', content)
                 issue = match.group(1) if match else "Agent requested help"
                 return f"Agent stuck: {issue}"
-                
+
         # Check output for help requests
         if hasattr(result, 'output_lines'):
             output_text = "\n".join(result.output_lines[-100:])  # Last 100 lines
@@ -100,35 +100,35 @@ class ZenIntegration:
             for pattern in help_patterns:
                 if pattern in output_text:
                     return f"Agent requested: {pattern}"
-                    
+
         return None
-        
+
     def _detect_stuck_agent(self, result, context, session_id: str) -> bool:
         """Alias for _detect_stuck_status for backward compatibility"""
         # Return boolean for backward compatibility
         return self._detect_stuck_status(result, session_id) is not None
-        
+
     def _detect_error_pattern(self, result, session_id: str) -> Optional[str]:
         """Check for repeated error patterns"""
         if not hasattr(result, 'errors') or not result.errors:
             return None
-            
+
         # Track errors for this session
         if session_id not in self.error_counts:
             self.error_counts[session_id] = {}
-            
+
         # Count similar errors
         for error in result.errors:
             # Simple error categorization
             error_key = self._categorize_error(error)
             self.error_counts[session_id][error_key] = \
                 self.error_counts[session_id].get(error_key, 0) + 1
-                
+
             if self.error_counts[session_id][error_key] >= self.config.auto_debug_threshold:
                 return f"Repeated error ({self.error_counts[session_id][error_key]}x): {error_key}"
-                
+
         return None
-        
+
     def _categorize_error(self, error: str) -> str:
             """Categorize error for pattern detection"""
             # Define known error patterns
@@ -144,35 +144,35 @@ class ZenIntegration:
                 "key_error": ["KeyError", "key not found"],
                 "runtime_error": ["RuntimeError", "runtime error"]
             }
-            
+
             # Check against known patterns
             for category, patterns in error_patterns.items():
                 if any(pattern in error for pattern in patterns):
                     return category
-            
+
             # For unknown errors, use a generic category rather than creating unbounded ones
             return "unknown_error"
 
-            
+
     def _detect_cutoff(self, result, context) -> bool:
         """Detect if execution was likely cut off at turn limit"""
         # Use new completion flags if available
         if hasattr(result, 'stopped_unexpectedly'):
             return result.stopped_unexpectedly
-            
+
         # Fallback to pattern detection for backward compatibility
         if hasattr(result, 'task_complete') and result.task_complete:
             return False  # Task completed successfully
-            
+
         # Check for signs of being cut off
         if hasattr(result, 'output_lines') and len(result.output_lines) > 0:
             last_lines = "\n".join(result.output_lines[-LAST_LINES_TO_CHECK:])
-            
+
             # Look for signs of incomplete work
             has_remaining_todos = False
             if hasattr(context, 'remaining_todos') and hasattr(context.remaining_todos, '__len__'):
                 has_remaining_todos = len(context.remaining_todos) > 0
-                    
+
             cutoff_indicators = [
                 "ALL TASKS COMPLETE" not in last_lines,
                 "HELP NEEDED" not in last_lines,  # Not a help request
@@ -182,28 +182,28 @@ class ZenIntegration:
                 "next, i'll" in last_lines.lower(),
                 "let me" in last_lines.lower()
             ]
-            
+
             # If multiple indicators suggest cutoff
             if sum(cutoff_indicators) >= CUTOFF_INDICATOR_THRESHOLD:
                 return True
-                
+
         return False
 
-            
+
     def _task_requires_validation(self, task_description) -> Optional[str]:
         """Check if task matches validation patterns"""
         if not task_description:
             return None
-            
+
         task_lower = str(task_description).lower()
         for pattern in self.config.validate_on_complete:
             # Convert glob pattern to regex
             regex_pattern = pattern.replace("*", ".*")
             if re.search(regex_pattern, task_lower):
                 return f"Matches pattern: {pattern}"
-                
+
         return None
-        
+
     def _detect_repeated_errors(self, result, context=None) -> Tuple[bool, int]:
         """Legacy method for backward compatibility"""
         # This is now handled by _detect_error_pattern
@@ -217,7 +217,7 @@ class ZenIntegration:
         # Return True if any error type appears 3+ times
         max_count = max(error_types.values()) if error_types else 0
         return max_count >= 3, max_count
-        
+
     def _is_critical_task(self, context) -> bool:
         """Check if current task is critical"""
         if hasattr(context, 'current_task') and context.current_task:
@@ -228,8 +228,8 @@ class ZenIntegration:
             ]
             return any(pattern in task_lower for pattern in critical_patterns)
         return False
-        
-    def _create_zen_request(self, tool: str, reason: str, execution_result, 
+
+    def _create_zen_request(self, tool: str, reason: str, execution_result,
                            context, session_id: str, priority: str = "normal") -> ZenRequest:
         """Create a zen request object"""
         # Build execution history
@@ -241,7 +241,7 @@ class ZenIntegration:
                 'errors': execution_result.errors if hasattr(execution_result, 'errors') else [],
                 'metadata': execution_result.metadata if hasattr(execution_result, 'metadata') else {}
             })
-            
+
         # Build context dict
         context_dict = {}
         if hasattr(context, 'todos'):
@@ -250,7 +250,7 @@ class ZenIntegration:
             context_dict['completed_todos'] = context.completed_todos
         if hasattr(context, 'remaining_todos'):
             context_dict['remaining_todos'] = context.remaining_todos
-            
+
         return ZenRequest(
             tool=tool,
             reason=reason,
@@ -260,7 +260,7 @@ class ZenIntegration:
             execution_history=execution_history,
             scratchpad_path=f".cadence/scratchpad/session_{session_id}.md"
         )
-        
+
     def _call_zen_tool(self, request: ZenRequest) -> Dict[str, Any]:
         """Execute zen tool call"""
         # This would be the actual implementation
@@ -271,21 +271,21 @@ class ZenIntegration:
             "guidance": f"Mock response for {request.tool}",
             "response": f"Mock response for {request.tool}"
         }
-        
-    def call_zen_support(self, tool: str, reason: str, 
+
+    def call_zen_support(self, tool: str, reason: str,
                         execution_result, context, session_id: str) -> Dict[str, Any]:
         """
         Call appropriate zen tool for assistance
-        
+
         Returns:
             Dict with zen response and guidance
         """
         if self.verbose:
             print(f"\n🔮 Calling zen {tool} for: {reason}")
-            
+
         # Prepare context for zen
         zen_context = self._prepare_zen_context(execution_result, context, session_id)
-        
+
         # Select appropriate zen tool
         if tool == "debug":
             return self._zen_debug(reason, zen_context)
@@ -299,27 +299,27 @@ class ZenIntegration:
             return self._zen_analyze(reason, zen_context)
         else:
             return {"error": f"Unknown zen tool: {tool}"}
-            
+
     def _prepare_zen_context(self, execution_result, context, session_id: str) -> Dict[str, Any]:
         """Prepare focused context for zen tools"""
         zen_context = {
             "session_id": session_id,
             "timestamp": datetime.now().isoformat()
         }
-        
+
         # Add scratchpad content
         scratchpad_path = Path(SCRATCHPAD_DIR) / f"session_{session_id}.md"
         if scratchpad_path.exists():
             zen_context["scratchpad"] = scratchpad_path.read_text()
-        
+
         # Add recent output (last 200 lines)
         if hasattr(execution_result, 'output_lines'):
             zen_context["recent_output"] = "\n".join(execution_result.output_lines[-200:])
-            
+
         # Add error information
         if hasattr(execution_result, 'errors') and execution_result.errors:
             zen_context["errors"] = execution_result.errors
-            
+
         # Add task information
         if hasattr(context, 'todos'):
             zen_context["todos"] = context.todos
@@ -327,15 +327,15 @@ class ZenIntegration:
             zen_context["completed_todos"] = context.completed_todos
         if hasattr(context, 'remaining_todos'):
             zen_context["remaining_todos"] = context.remaining_todos
-            
+
         # Add execution metrics
         if hasattr(execution_result, 'turns_used'):
             zen_context["turns_used"] = execution_result.turns_used
         if hasattr(context, 'max_turns'):
             zen_context["max_turns"] = context.max_turns
-            
+
         return zen_context
-        
+
     def _format_context_prompt(self, reason: str, context: Dict[str, Any], additional_sections: Dict[str, str] = None) -> str:
         """Format a standardized context prompt for zen tools"""
         sections = [
@@ -353,29 +353,29 @@ class ZenIntegration:
             "=== RECENT OUTPUT (last 200 lines) ===",
             context.get('recent_output', 'Not available')
         ]
-        
+
         # Add any additional sections provided
         if additional_sections:
             for title, content in additional_sections.items():
                 sections.extend(["", f"=== {title.upper()} ===", content])
-        
+
         return "\n".join(sections)
-        
+
     def _zen_debug(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
             """Call zen debug for stuck/error situations"""
             models = self.config.models.get("debug", ["o3", "pro"])
             thinking_mode = self.config.thinking_modes.get("debug", "high")
-            
+
             # Use specialized debug prompt
             zen_context = self._format_context_prompt(reason, context)
             prompt = ZenPrompts.debug_prompt(reason, context, zen_context)
-            
+
             # Use first model from list for now
             model = models[0] if models else "pro"
-            
+
             if self.verbose:
                 print(f"   Using model: {model} (thinking: {thinking_mode})")
-                
+
             # Build zen command
             cmd = [
                 "claude", "-p", prompt,
@@ -383,7 +383,7 @@ class ZenIntegration:
                 "--mcp-tool", f"zen__debug",
                 "--model", model
             ]
-            
+
             # For now, return mock response - real implementation would call zen
             return {
                 "tool": "debug",
@@ -399,7 +399,7 @@ class ZenIntegration:
                 "prompt_used": prompt  # Store for documentation
             }
 
-        
+
     def _zen_review(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Call zen code review"""
         # Similar pattern to debug
@@ -407,7 +407,7 @@ class ZenIntegration:
             "tool": "review",
             "guidance": f"[Zen review would appear here for: {reason}]"
         }
-        
+
     def _zen_consensus(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Call zen consensus for decisions"""
         models = self.config.models.get("consensus", ["o3", "pro", "flash"])
@@ -416,14 +416,14 @@ class ZenIntegration:
             "models": models,
             "guidance": f"[Zen consensus would appear here for: {reason}]"
         }
-        
+
     def _zen_precommit(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Call zen precommit for validation"""
         return {
             "tool": "precommit",
             "guidance": f"[Zen precommit validation would appear here for: {reason}]"
         }
-        
+
     def _zen_analyze(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Call zen analyze for retrospectives"""
         return {
@@ -437,11 +437,11 @@ class ZenIntegration:
             if self.verbose:
                 print(f"Cleaning up error counts for session {session_id}")
             del self.error_counts[session_id]
-        
+
     def generate_continuation_guidance(self, zen_response: Dict[str, Any]) -> str:
         """
         Generate guidance for agent continuation based on zen response
-        
+
         Returns:
             String guidance to include in continuation prompt
         """
@@ -453,10 +453,10 @@ class ZenIntegration:
 Assistance was requested but encountered an issue: {error}
 Proceed with standard debugging approaches.
 """
-        
+
         tool = zen_response.get("tool", "unknown")
         guidance = zen_response.get("guidance", "No specific guidance provided")
-        
+
         if tool == "debug":
             actions = zen_response.get("recommended_actions", [])
             action_list = "\n".join([f"- {action}" for action in actions])
@@ -473,7 +473,7 @@ Recommended next steps:
 
 Focus on addressing these specific issues before continuing with remaining TODOs.
 """
-        
+
         elif tool == "precommit":
             return f"""
 === VALIDATION FEEDBACK ===
@@ -484,7 +484,7 @@ Zen assistance provided.
 
 Address any concerns mentioned above before marking the task as complete.
 """
-        
+
         else:
             return f"""
 === SUPERVISOR GUIDANCE ===

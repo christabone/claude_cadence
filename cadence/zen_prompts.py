@@ -11,12 +11,12 @@ from datetime import datetime
 
 class ZenPrompts:
     """Specialized prompts for different Zen MCP scenarios"""
-    
+
     @staticmethod
     def debug_prompt(reason: str, context: Dict[str, Any], zen_context: str) -> str:
         """
         Generate specialized prompt for Zen debug assistance
-        
+
         Focus: Unblock the agent with minimal, targeted fixes
         """
         return f"""You are assisting a Claude agent that is stuck during task execution.
@@ -49,7 +49,7 @@ Remember: The goal is task completion, not perfection. Provide the smallest inte
     def review_prompt(task_type: str, context: Dict[str, Any], code_context: str) -> str:
         """
         Generate specialized prompt for Zen code review
-        
+
         Focus: Critical issues only, no style nitpicks
         """
         return f"""You are reviewing code for a specific task completion.
@@ -81,7 +81,7 @@ Remember: We're validating task completion, not seeking perfection."""
     def consensus_prompt(decision_type: str, options: List[str], context: Dict[str, Any]) -> str:
         """
         Generate specialized prompt for Zen consensus decisions
-        
+
         Focus: Quick, practical decisions to keep moving forward
         """
         return f"""Help make a quick implementation decision to keep the task moving.
@@ -113,7 +113,7 @@ Make the practical choice that unblocks progress."""
     def precommit_prompt(task_description: str, changes_summary: str, context: Dict[str, Any]) -> str:
         """
         Generate specialized prompt for Zen precommit validation
-        
+
         Focus: Safety and correctness checks only
         """
         return f"""Validate that a critical task has been completed safely.
@@ -152,7 +152,7 @@ Focus on critical issues only. Minor improvements are not failures."""
     def analyze_prompt(cutoff_reason: str, progress_summary: str, context: Dict[str, Any]) -> str:
         """
         Generate specialized prompt for Zen retrospective analysis
-        
+
         Focus: Learn what happened and plan minimal next steps
         """
         return f"""Analyze why an agent task was cut off and plan minimal recovery.
@@ -187,20 +187,20 @@ Keep focus on task completion, not optimization."""
     def format_zen_guidance(tool: str, zen_response: Dict[str, Any], stay_focused: bool = True) -> str:
         """
         Format Zen response into guidance for the agent
-        
+
         Args:
             tool: The Zen tool that was called
             zen_response: Response from Zen tool
             stay_focused: Whether to include focus reminder
-            
+
         Returns:
             Formatted guidance string
         """
         base_guidance = zen_response.get('guidance', 'No specific guidance provided')
-        
+
         if not stay_focused:
             return base_guidance
-            
+
         focus_reminder = """
 IMPORTANT: While this analysis provides useful insights, remember to:
 - Stay focused on completing your current TODOs
@@ -208,28 +208,28 @@ IMPORTANT: While this analysis provides useful insights, remember to:
 - Document broader suggestions for later review
 - Avoid scope creep or architectural changes
 """
-        
+
         if tool == 'debug':
             return f"""{base_guidance}
 
 {focus_reminder}
 
 Focus on the specific fix suggested and continue with your TODOs."""
-        
+
         elif tool == 'precommit':
             return f"""{base_guidance}
 
 {focus_reminder}
 
 Address only the critical issues mentioned, then proceed."""
-            
+
         elif tool == 'analyze':
             return f"""{base_guidance}
 
 {focus_reminder}
 
 Complete the minimal remaining steps identified above."""
-            
+
         else:
             return f"""{base_guidance}
 
@@ -239,11 +239,11 @@ Complete the minimal remaining steps identified above."""
     def generate_zen_documentation(session_id: str, zen_requests: List[Dict[str, Any]]) -> str:
         """
         Generate markdown documentation of Zen suggestions for later review
-        
+
         Args:
             session_id: Current session ID
             zen_requests: List of Zen interactions from this session
-            
+
         Returns:
             Markdown formatted documentation
         """
@@ -257,12 +257,12 @@ Complete the minimal remaining steps identified above."""
             "## Suggestions for Future Consideration",
             ""
         ]
-        
+
         for i, request in enumerate(zen_requests, 1):
             tool = request.get('tool', 'unknown')
             reason = request.get('reason', 'No reason provided')
             response = request.get('response', {})
-            
+
             doc_parts.extend([
                 f"### {i}. {tool.capitalize()} Assistance",
                 f"**Reason**: {reason}",
@@ -271,7 +271,7 @@ Complete the minimal remaining steps identified above."""
                 response.get('guidance', 'No guidance provided'),
                 ""
             ])
-            
+
             # Add tool-specific sections
             if tool == 'debug' and 'recommended_actions' in response:
                 doc_parts.extend([
@@ -279,24 +279,24 @@ Complete the minimal remaining steps identified above."""
                     *[f"- {action}" for action in response['recommended_actions']],
                     ""
                 ])
-            
+
             elif tool == 'analyze' and 'lessons_learned' in response:
                 doc_parts.extend([
                     "**Lessons for Future Tasks**:",
                     *[f"- {lesson}" for lesson in response['lessons_learned']],
                     ""
                 ])
-            
+
             elif tool == 'review' and 'future_improvements' in response:
                 doc_parts.extend([
                     "**Code Quality Improvements**:",
                     response['future_improvements'],
                     ""
                 ])
-            
+
             doc_parts.append("---")
             doc_parts.append("")
-        
+
         # Add summary section
         doc_parts.extend([
             "## Summary",
@@ -306,12 +306,12 @@ Complete the minimal remaining steps identified above."""
             "",
             "### Priority Areas:",
             "1. Performance optimizations noted during debugging",
-            "2. Architectural improvements identified during analysis", 
+            "2. Architectural improvements identified during analysis",
             "3. Code quality enhancements from reviews",
             "",
             "_Remember: Task completion takes precedence over perfection._"
         ])
-        
+
         return "\n".join(doc_parts)
 
 
