@@ -90,12 +90,12 @@ shared_agent_context:
          * Any command with `sudo` or affecting system files
        - When in doubt, note the risky operation in your scratchpad and proceed cautiously
     
-    6. PROGRESS: Update your scratchpad IMMEDIATELY after EACH TODO:
-       - As soon as you complete a TODO, update the scratchpad
+    6. PROGRESS: Update your scratchpad IMMEDIATELY after EACH Subtask:
+       - As soon as you complete a Subtask, update the scratchpad
        - This ensures progress is saved even if execution stops
        - Log each completion in your scratchpad:
          ```
-         ## TODO #1: [original todo text]
+         ## Subtask #1: [original Subtask text]
          Status: COMPLETE ✅
          Summary: [brief description of what was done]
          Notes: [any issues or deviations]
@@ -119,7 +119,7 @@ shared_agent_context:
        - "SECURITY_REVIEW_NEEDED" - For security concerns
        - "PERFORMANCE_REVIEW_NEEDED" - For optimization questions
     
-    8. COMPLETION: When ALL TODOs are done:
+    8. COMPLETION: When ALL Subtasks are done:
        - Update the "Completion Summary" section in your scratchpad
        - Include: what was completed (✅), issues encountered (⚠️), follow-up suggestions (💡)
        - Declare "ALL TASKS COMPLETE"
@@ -166,7 +166,7 @@ agent_prompts:
       - "{todo_list}"  # Generated dynamically
       - |
         === BEGIN WORK ===
-        1. FIRST: Create your scratchpad file at .cadence/scratchpad/session_{session_id}.md
+        1. FIRST: Create your scratchpad file at .cadence/scratchpad/session_{session_id}.md (full path: {project_root}/.cadence/scratchpad/session_{session_id}.md)
         2. Work through TODOs systematically, updating your scratchpad as you go
         3. Remember: You're part of a supervised workflow. Focus on your assigned tasks.
         4. Quality and safety are more important than speed.
@@ -208,11 +208,36 @@ todo_templates:
     
     {todo_items}
     
-    REMEMBER: First create your scratchpad at .cadence/scratchpad/session_{session_id}.md
+    REMEMBER: First create your scratchpad at .cadence/scratchpad/session_{session_id}.md (absolute path: {project_root}/.cadence/scratchpad/session_{session_id}.md)
     Focus on completing these systematically. 
     When all are done, update your scratchpad and state 'ALL TASKS COMPLETE'.
   
   todo_item: "{number}. {todo_text}"
+  
+  # Scratchpad retry prompt for when agent fails to create scratchpad
+  scratchpad_retry: |
+    URGENT: You are being re-run because you failed to create your scratchpad file.
+
+    Your ONLY task right now is to create the required scratchpad file at the correct absolute path:
+    1. Create directory (if it doesn't exist): {project_root}/.cadence/scratchpad/
+    2. Create file: {project_root}/.cadence/scratchpad/session_{session_id}.md
+    3. Include this exact content:
+
+    ```
+    # Task Execution Scratchpad
+    Session ID: {session_id}
+    Task ID: {task_id}
+    Created: {timestamp}
+    Status: SCRATCHPAD_CREATED
+
+    ## Notes
+    This scratchpad was created during a retry because the initial agent run failed to create it.
+
+    ## Completion
+    SCRATCHPAD CREATION COMPLETE
+    ```
+
+    CRITICAL: Use the exact absolute paths provided above. The file MUST be created at: {project_root}/.cadence/scratchpad/session_{session_id}.md
   
   progress_summary: |
     === COMPLETED WORK ===
@@ -266,6 +291,9 @@ supervisor_prompts:
       
       IMPORTANT: The project root is: {project_root}
       
+      YOUR OUTPUT REQUIREMENT: You MUST end your response with a valid JSON decision object.
+      This is critical for the orchestrator to continue. See the "REQUIRED OUTPUT" section below.
+      
       AVAILABLE TOOLS:
       - Task Master MCP (mcp__taskmaster-ai__*) - For task management
       - Serena MCP (mcp__serena__*) - For semantic code analysis
@@ -280,16 +308,97 @@ supervisor_prompts:
       
       {% if has_previous_agent_result %}
       === CRITICAL: PROCESS AGENT'S COMPLETED WORK FIRST ===
+      {% if not agent_completed_normally %}
+      ⚠️  WARNING: The agent did NOT complete normally.
+      
+      HOW WE DETERMINED THIS:
+      - We searched for "ALL TASKS COMPLETE" (case-insensitive) in the agent's output
+      - This completion signal was NOT found
+      - This could mean several things:
+        * Hit the {{ max_turns }} turn limit while still working
+        * Encountered a blocking error
+        * Forgot to declare completion (but actually finished)
+        * Got stuck in a loop or confused
+        * Crashed unexpectedly
+      
+      CRITICAL INVESTIGATION STEPS:
+      
+      1. VERIFY THE DETERMINATION:
+         - Check agent logs for variations like "all tasks done", "completed all todos", "finished"
+         - Look at the last 20 lines - was the agent still actively working?
+         - Could the agent have completed but forgot the exact phrase?
+      
+      2. CHECK SCRATCHPAD AND AGENT LOGS:
+         - First try to read: .cadence/scratchpad/session_{session_id}.md
+         - If scratchpad DOES NOT EXIST, this means the agent failed to create it (despite instructions)
+         - IMPORTANT: Check agent logs at .cadence/agent/output_{session_id}.log
+         - Look for evidence the agent actually ran: tool calls, task work, file modifications
+         - If agent logs show activity but no scratchpad = agent ignored instructions
+         - If no agent logs exist = agent never ran at all
+         - Don't rely solely on scratchpad - always verify with other sources
+      
+      3. ANALYZE TASK MASTER STATUS (CRITICAL):
+         - Run: mcp__taskmaster-ai__get_task --id={{ agent_task_id }} --projectRoot={project_root} --withSubtasks=true
+         - Compare what was assigned vs. current subtask statuses
+         - The agent may have updated Task Master without updating scratchpad
+         - Or completed work without updating either
+      
+      4. EXAMINE AGENT LOGS:
+         - Read: .cadence/logs/agent_{session_id}.log
+         - Look for:
+           * Error patterns (same error 3+ times = stuck)
+           * Last successful action
+           * Files created/modified
+           * Task Master API calls
+           * Signs of confusion or circular logic
+      
+      5. DIAGNOSE THE SCENARIO:
+         
+         Scenario A - Hit Turn Limit (Most Common):
+         - No errors in final output
+         - Still actively working
+         - Some subtasks marked complete
+         → Action: Update completed subtasks, re-dispatch with remaining work
+         
+         Scenario B - Forgot Declaration:
+         - All subtasks show "done" in Task Master
+         - No errors or issues
+         - Work appears complete
+         → Action: Verify completion, run code review, mark complete yourself
+         
+         Scenario C - Technical Blocker:
+         - Repeated errors (same error multiple times)
+         - No progress in last 10+ turns
+         - "HELP NEEDED" might appear
+         → Action: Call zen debug, provide specific workaround guidance
+         
+         Scenario D - Implementation Confusion:
+         - Conflicting approaches tried
+         - Going in circles
+         - Unclear about requirements
+         → Action: Clarify requirements, consider zen consensus or zen analyze for approach
+      
+      6. DECIDE ON ZEN ASSISTANCE:
+         - Use zen analyze if: turn limit with <50% complete, confusion about approach
+         - Use zen debug if: specific technical errors, permission issues, API problems
+         - Skip zen if: simple continuation needed, just forgot declaration
+      {% endif %}
       The agent just finished working. Before doing ANYTHING else, you MUST:
       
       1. Read the decision snapshot to see what was requested:
          - Read: .cadence/supervisor/decision_snapshot_{session_id}.json
          - This shows exactly what task/subtasks were assigned to the agent
       
-      2. Read the agent's scratchpad to understand what was completed:
-         - Read: .cadence/scratchpad/session_{session_id}.md
+      2. {% if agent_completed_normally %}Read the agent's scratchpad to understand what was completed:
+         - Read: .cadence/scratchpad/session_{session_id}.md (absolute path: {project_root}/.cadence/scratchpad/session_{session_id}.md)
          - Look for "ALL TASKS COMPLETE" which means all TODOs were finished
          - Look for specific TODO completions mentioned in the scratchpad
+         - NOTE: If scratchpad doesn't exist, the agent likely never started or failed early
+      {% else %}Since the agent didn't complete normally, follow the investigation steps above:
+         - Complete all 6 investigation steps from the WARNING section
+         - Based on your diagnosis, determine the best action
+         - If re-dispatching, prepare specific guidance to address the issue
+      {% endif %}
       
       3. Compare the snapshot with actual completion:
          - The snapshot shows what subtasks were assigned
@@ -300,15 +409,40 @@ supervisor_prompts:
          - Get the task details: mcp__taskmaster-ai__get_task --id={{ agent_task_id }} --projectRoot={project_root} --withSubtasks=true
          - Check which subtasks are now marked as "done" by the agent
          - If agent missed updating any completed subtasks, update them yourself
-         - Only update subtasks that were actually completed based on scratchpad
+         - Only update subtasks that were actually completed based on {% if agent_completed_normally %}scratchpad{% else %}available evidence{% endif %}
       
-      5. If agent's scratchpad shows "ALL TASKS COMPLETE":
+      5. {% if agent_completed_normally %}If agent's scratchpad shows "ALL TASKS COMPLETE":
          - Do YOUR OWN code review first:
            * Read the files that were modified
            * Verify the implementation matches requirements
            * Check code quality and correctness
          - If your review passes, consider running: mcp__zen__review
          - Only proceed after reviews are complete
+      {% else %}Handle the incomplete execution based on your diagnosis:
+         
+         FOR RE-DISPATCH (most common):
+         - Update any completed subtasks in Task Master first
+         - Prepare specific guidance that addresses the root cause:
+           * If hit turn limit: "Continue from subtask X. Previous run completed Y and Z."
+           * If blocked by error: "Use [specific workaround] to avoid [specific issue]"
+           * If confused: "Focus on [clarified requirement]. Use [specific approach]"
+         - Include in guidance:
+           * What was already completed (be specific)
+           * Where to start (exact subtask)
+           * How to avoid previous issues
+           * Reminder to declare "ALL TASKS COMPLETE" when done
+         
+         FOR SEEKING HELP:
+         - If technical blocker: Call mcp__zen__debug with specific error details
+         - If design confusion: Call mcp__zen__consensus with options
+         - If complex cutoff: Call mcp__zen__analyze with progress summary
+         - Document the blocker in your skip reason
+         
+         FOR TASK COMPLETION (rare but possible):
+         - If all subtasks show "done" and work verified complete
+         - Run code review: mcp__zen__review
+         - Only mark complete after review passes
+      {% endif %}
       
       ONLY AFTER completing all the above, continue with finding the next task:
       {% endif %}
@@ -329,6 +463,10 @@ supervisor_prompts:
       4. Check for any blockers or issues:
          - If this is a fresh task (not continuing), check if a scratchpad exists
          - Look for any "HELP NEEDED" or blocking issues from previous attempts
+         {% if has_previous_agent_result and not agent_completed_normally %}
+         - IMPORTANT: Consider if the incomplete run indicates a pattern that needs addressing
+         - If the agent repeatedly fails on similar tasks, consider zen assistance
+         {% endif %}
       
       5. OPTIONAL - Use Serena for code understanding:
          - If tasks involve code changes, use mcp__serena__find_symbol to understand code structure
@@ -345,6 +483,10 @@ supervisor_prompts:
            * For partially completed tasks, only send the remaining pending subtasks
            * Check each subtask's status individually before including it
            * NEVER send subtasks that are already "done"
+           {% if has_previous_agent_result and not agent_completed_normally %}
+           * Include specific guidance about issues from the incomplete run
+           * Consider whether zen assistance is needed before re-dispatching
+           {% endif %}
          - "skip": If the current task has no pending subtasks or cannot be worked on
          - "complete": If all tasks in the project are done
          
@@ -357,6 +499,10 @@ supervisor_prompts:
          - ONLY include subtasks with status "pending" or "in-progress"
          - Each TODO should be the subtask's title and description combined
          - If all subtasks are already "done", check the next task instead
+         {% if has_previous_agent_result and not agent_completed_normally %}
+         - Include guidance about avoiding the issues that caused the incomplete run
+         - Be specific about what to do differently this time
+         {% endif %}
       
       9. CRITICAL - PROJECT COMPLETION:
          When ALL Task Master tasks show status "done" AND no tasks remain:
@@ -374,7 +520,7 @@ supervisor_prompts:
          - This signals the orchestrator to end the session
     
     code_review_sections:
-      task_level: |
+      task: |
         
         CODE REVIEW INSTRUCTIONS:
         {% if has_previous_agent_result %}
@@ -398,7 +544,7 @@ supervisor_prompts:
              * Task remains "done"
              * Continue to analyze the next task
       
-      project_level: |
+      project: |
         
         CODE REVIEW INSTRUCTIONS:
         IMPORTANT: Only proceed with project-level review after:
@@ -431,6 +577,29 @@ supervisor_prompts:
       - Security-critical features need review before coding
       - Performance optimization requires analysis
       - The agent has repeatedly failed with similar errors
+      {% if has_previous_agent_result and not agent_completed_normally %}
+      - The agent was cut off at the turn limit (use zen analyze)
+      - You need help understanding what the agent completed
+      {% endif %}
+      
+      {% if has_previous_agent_result and not agent_completed_normally %}
+      SPECIAL HANDLING FOR INCOMPLETE RUNS:
+      Since the agent didn't complete normally, consider using zen analysis:
+      
+      1. Call zen analyze for cutoff analysis:
+         mcp__zen__analyze
+         - Provide cutoff reason: "Agent hit {{ max_turns }} turn limit"
+         - Include what you found from logs/Task Master
+         - Get recommendations on how to proceed
+      
+      2. Based on zen analysis, decide whether to:
+         - Re-dispatch agent with remaining work
+         - Call zen debug for specific blockers
+         - Skip the task temporarily
+         - Break down the task differently
+      
+      3. If re-dispatching, include zen's guidance in your instructions
+      {% endif %}
       
       CRITICAL GUIDANCE FOR ZEN USAGE:
       If you determine that Zen assistance is needed:
@@ -450,6 +619,12 @@ supervisor_prompts:
       3. ✅ Create TODO list with ONLY pending subtasks
       4. ✅ Output JSON decision
       {% endif %}
+      
+      === CRITICAL: JSON OUTPUT REQUIREMENT ===
+      YOU MUST OUTPUT A JSON DECISION AT THE END OF YOUR ANALYSIS.
+      
+      After completing all analysis and Task Master operations, you MUST output a valid JSON object.
+      Do not end your response without providing the JSON decision.
       
       REQUIRED OUTPUT:
       After analyzing the tasks, output ONLY a JSON object (no other text) with this exact structure:
@@ -486,6 +661,9 @@ supervisor_prompts:
       - If no tasks have pending subtasks, set action to "skip"
       - For code reviews, call mcp__zen__review directly when instructed
       - The orchestrator will continue running until you signal completion with the marker file
+      
+      FINAL REMINDER: END YOUR RESPONSE WITH THE JSON DECISION OBJECT ONLY.
+      NO TEXT AFTER THE JSON. THE LAST THING IN YOUR OUTPUT MUST BE THE CLOSING } OF THE JSON.
   
   analysis:
     sections:

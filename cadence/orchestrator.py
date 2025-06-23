@@ -182,8 +182,7 @@ class SupervisorOrchestrator:
                     elif msg_type == 'result':
                         # Final result
                         duration = json_data.get('duration_ms', 0)
-                        cost = json_data.get('total_cost_usd', 0)
-                        print(f"{color}[{process_name}]{Colors.RESET} ✅ {Colors.BOLD_GREEN}Completed{Colors.RESET} in {duration}ms, cost: ${cost:.4f}")
+                        print(f"{color}[{process_name}]{Colors.RESET} ✅ {Colors.BOLD_GREEN}Completed{Colors.RESET} in {duration}ms")
                         
                 except json.JSONDecodeError:
                     # Not JSON, display as plain text
@@ -422,6 +421,41 @@ class SupervisorOrchestrator:
                     logger.error("Exiting program due to quick agent exit")
                     return False
                 
+                # 3.5. Validate agent created required scratchpad (with retry logic)
+                max_scratchpad_retries = 5
+                scratchpad_retry_count = 0
+                
+                while scratchpad_retry_count < max_scratchpad_retries:
+                    if self.validate_agent_scratchpad(self.current_session_id, agent_result):
+                        # Scratchpad exists, we're good
+                        break
+                    
+                    scratchpad_retry_count += 1
+                    if scratchpad_retry_count >= max_scratchpad_retries:
+                        logger.error(f"Agent failed to create scratchpad after {max_scratchpad_retries} attempts")
+                        logger.error("This indicates a serious agent prompt following issue")
+                        return False
+                    
+                    logger.warning(f"Scratchpad missing, attempting retry {scratchpad_retry_count}/{max_scratchpad_retries}")
+                    
+                    # Retry agent with focused scratchpad creation prompt
+                    retry_result = self.retry_agent_for_scratchpad(
+                        session_id=self.current_session_id,
+                        task_id=decision.task_id,
+                        project_root=str(self.project_root)
+                    )
+                    
+                    if not retry_result.success:
+                        logger.error(f"Scratchpad retry {scratchpad_retry_count} failed")
+                        continue
+                    
+                    # Check if retry actually created the scratchpad
+                    if self.validate_agent_scratchpad(self.current_session_id, agent_result):
+                        logger.info(f"Scratchpad successfully created on retry {scratchpad_retry_count}")
+                        break
+                    else:
+                        logger.warning(f"Scratchpad retry {scratchpad_retry_count} completed but scratchpad still missing")
+                
                 # 4. Save agent results for supervisor
                 self.save_agent_results(agent_result, self.current_session_id, decision.todos, decision.task_id)
                 
@@ -497,7 +531,8 @@ class SupervisorOrchestrator:
                         "agent_success": previous_agent_result.get("success", False) if previous_agent_result else False,
                         "agent_completed_normally": previous_agent_result.get("completed_normally", False) if previous_agent_result else False,
                         "agent_todos": previous_agent_result.get("todos", []) if previous_agent_result else [],
-                        "agent_task_id": previous_agent_result.get("task_id", "") if previous_agent_result else ""
+                        "agent_task_id": previous_agent_result.get("task_id", "") if previous_agent_result else "",
+                        "max_turns": self.config.get("execution", {}).get("max_turns", 80)
                     }
                     
                     # Get base prompt
@@ -525,20 +560,50 @@ class SupervisorOrchestrator:
                     output_format = self.prompt_loader.get_template("supervisor_prompts.orchestrator_taskmaster.output_format")
                     output_format = self.prompt_loader.format_template(output_format, context)
                     
-                    # If this is a retry, add JSON formatting reminder
+                    # If this is a retry, use a shorter prompt to avoid token limits
                     if json_retry_count > 0:
-                        json_retry_prompt = f"""
-                        
-                        CRITICAL: Your previous output had invalid JSON formatting. 
-                        Please output ONLY a valid JSON object with NO other text before or after.
-                        The JSON must have these exact fields: action, todos, guidance, task_id, session_id, reason
-                        
-                        Retry attempt {json_retry_count + 1} of {max_json_retries}.
-                        """
-                        supervisor_prompt = f"{base_prompt}{code_review_section}{zen_guidance}{output_format}{json_retry_prompt}"
+                        # Create a minimal retry prompt to avoid token limits
+                        minimal_retry_prompt = f"""You are the Task Supervisor. Project root: {context['project_root']}
+
+CRITICAL: Your previous output had invalid JSON formatting. 
+Please analyze the current task state and output ONLY a valid JSON object.
+
+REQUIRED OUTPUT FORMAT:
+For "execute" action:
+{{
+    "action": "execute",
+    "task_id": "X",
+    "task_title": "Title", 
+    "subtasks": [{{"id": "X.Y", "title": "...", "description": "..."}}],
+    "project_root": "{context['project_root']}",
+    "guidance": "Brief guidance",
+    "session_id": "{context['session_id']}",
+    "reason": "Why this action"
+}}
+
+For "skip" or "complete" actions:
+{{
+    "action": "skip|complete",
+    "session_id": "{context['session_id']}",
+    "reason": "Why this action"
+}}
+
+DO NOT include any explanatory text. Start with {{ and end with }}.
+Retry attempt {json_retry_count + 1} of {max_json_retries}."""
+                        supervisor_prompt = minimal_retry_prompt
                     else:
                         # Combine all sections normally
                         supervisor_prompt = f"{base_prompt}{code_review_section}{zen_guidance}{output_format}"
+                    
+                    # Save supervisor prompt to file for debugging
+                    prompt_debug_file = self.supervisor_dir / f"supervisor_prompt_{session_id}.txt"
+                    try:
+                        with open(prompt_debug_file, 'w') as f:
+                            f.write(supervisor_prompt)
+                        logger.debug(f"Saved supervisor prompt to {prompt_debug_file}")
+                        logger.debug(f"Supervisor prompt length: {len(supervisor_prompt)} characters")
+                    except Exception as e:
+                        logger.warning(f"Failed to save supervisor prompt: {e}")
                     
                     # Build allowed tools from config
                     basic_tools = self.config.get("supervisor", {}).get("tools", [
@@ -555,7 +620,7 @@ class SupervisorOrchestrator:
                         "claude",
                         "-p", supervisor_prompt,
                         "--allowedTools", ",".join(all_tools),
-                        "--max-turns", "10",
+                        "--max-turns", "80",
                         "--output-format", "stream-json",
                         "--verbose",
                         "--dangerously-skip-permissions"  # Skip permission prompts
@@ -583,7 +648,10 @@ class SupervisorOrchestrator:
                     
                     # Run supervisor with real-time output
                     supervisor_start_time = time.time()
+                    supervisor_end_time = None
+                    supervisor_duration = None
                     try:
+                        logger.debug(f"Starting supervisor subprocess with {len(cmd)} args")
                         # Run supervisor async for real-time output
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
@@ -591,15 +659,31 @@ class SupervisorOrchestrator:
                             returncode, all_output = loop.run_until_complete(
                                 self.run_claude_with_realtime_output(cmd, self.supervisor_dir, "SUPERVISOR")
                             )
+                            supervisor_end_time = time.time()
+                            supervisor_duration = (supervisor_end_time - supervisor_start_time) * 1000
+                            logger.info(f"Supervisor process completed in {supervisor_duration:.0f}ms with return code {returncode}")
                         finally:
                             loop.close()
                         
                         if returncode != 0:
                             logger.error(f"Supervisor failed with code {returncode}")
+                            logger.error(f"Output lines collected: {len(all_output)}")
+                            if all_output:
+                                logger.error(f"Last few output lines: {all_output[-5:]}")
                             raise RuntimeError(f"Supervisor failed with exit code {returncode}")
                         
+                    except asyncio.TimeoutError as e:
+                        supervisor_end_time = time.time()
+                        supervisor_duration = (supervisor_end_time - supervisor_start_time) * 1000
+                        logger.error(f"Supervisor timed out after {supervisor_duration:.0f}ms: {e}")
+                        raise RuntimeError(f"Supervisor execution timed out after {supervisor_duration:.0f}ms")
                     except Exception as e:
-                        logger.error(f"Supervisor execution error: {e}")
+                        supervisor_end_time = time.time()
+                        supervisor_duration = (supervisor_end_time - supervisor_start_time) * 1000
+                        logger.error(f"Supervisor execution error after {supervisor_duration:.0f}ms: {e}")
+                        logger.error(f"Exception type: {type(e).__name__}")
+                        import traceback
+                        logger.error(f"Traceback: {traceback.format_exc()}")
                         raise RuntimeError(f"Supervisor execution failed: {e}")
                     
                     logger.info("-" * 60)
@@ -608,7 +692,9 @@ class SupervisorOrchestrator:
                     
                     # Parse supervisor JSON output
                     try:
-                        logger.debug(f"Parsing supervisor output...")
+                        logger.debug(f"Parsing supervisor output from {len(all_output)} lines...")
+                        logger.debug(f"First 3 output lines: {all_output[:3] if all_output else 'None'}")
+                        logger.debug(f"Last 3 output lines: {all_output[-3:] if all_output else 'None'}")
                         
                         # Look for the decision JSON in assistant messages
                         json_str = None
@@ -617,7 +703,13 @@ class SupervisorOrchestrator:
                         import re
                         json_pattern = re.compile(r'\{[^{}]*"action"[^{}]*\}', re.DOTALL)
                         
-                        # Process each line looking for our decision JSON
+                        # Only look at the LAST few assistant messages to avoid false positives
+                        # from JSON-like content during the supervisor's thinking process
+                        recent_lines = all_output[-20:] if len(all_output) > 20 else all_output
+                        
+                        # Process recent lines in REVERSE order to find the LAST decision JSON
+                        # Collect all valid JSONs first, then take the last one
+                        found_jsons = []
                         for line_str in all_output:
                             try:
                                 # Parse the stream-json line
@@ -637,16 +729,17 @@ class SupervisorOrchestrator:
                                                         test_data = json.loads(match)
                                                         # Verify it has action field at minimum
                                                         if 'action' in test_data:
-                                                            json_str = match
-                                                            break
+                                                            found_jsons.append(match)
                                                     except json.JSONDecodeError:
                                                         continue
                             except json.JSONDecodeError:
                                 # This line wasn't JSON, skip it
                                 continue
                             
-                            if json_str:
-                                break
+                        
+                        # Take the LAST valid JSON found (the final decision)
+                        if found_jsons:
+                            json_str = found_jsons[-1]
                         
                         if not json_str:
                             # Fallback to original method if regex fails
@@ -677,8 +770,22 @@ class SupervisorOrchestrator:
                                     break
                         
                         if not json_str:
+                            logger.error("No decision JSON found in supervisor output")
+                            logger.error(f"Found {len(found_jsons)} candidate JSONs during regex search")
+                            logger.error(f"Total output lines processed: {len(all_output)}")
+                            # Log a sample of assistant messages for debugging
+                            assistant_lines = []
+                            for line_str in all_output[:10]:  # Just first 10 to avoid spam
+                                try:
+                                    data = json.loads(line_str)
+                                    if data.get('type') == 'assistant':
+                                        assistant_lines.append(line_str[:200])  # Truncate for readability
+                                except:
+                                    pass
+                            logger.error(f"Sample assistant message lines: {assistant_lines}")
                             raise ValueError("No decision JSON found in supervisor output")
                         
+                        logger.debug(f"Found decision JSON: {json_str[:100]}...")
                         decision_data = json.loads(json_str)
                         
                         # Validate required fields based on action
@@ -911,6 +1018,123 @@ class SupervisorOrchestrator:
 
 
     
+    def validate_agent_scratchpad(self, session_id: str, agent_result: AgentResult) -> bool:
+        """Validate that agent created required scratchpad file"""
+        scratchpad_file = self.project_root / ".cadence" / "scratchpad" / f"session_{session_id}.md"
+        
+        if scratchpad_file.exists():
+            logger.debug(f"Agent scratchpad found: {scratchpad_file}")
+            return True
+        else:
+            logger.warning(f"Agent scratchpad missing: {scratchpad_file}")
+            logger.warning(f"Agent claimed success but failed to create required scratchpad")
+            return False
+    
+    def retry_agent_for_scratchpad(self, session_id: str, task_id: str, project_root: str) -> AgentResult:
+        """Retry agent with focused prompt to create missing scratchpad"""
+        logger.info("Running focused agent retry to create missing scratchpad")
+        
+        # Get scratchpad retry prompt from prompts.yaml
+        context = {
+            "session_id": session_id,
+            "task_id": task_id,
+            "timestamp": datetime.now().isoformat(),
+            "project_root": str(self.project_root)
+        }
+        
+        scratchpad_prompt = self.prompt_loader.get_template("todo_templates.scratchpad_retry")
+        scratchpad_prompt = self.prompt_loader.format_template(scratchpad_prompt, context)
+        logger.info(f"Using scratchpad retry prompt, length: {len(scratchpad_prompt)} characters")
+        
+        # Debug: Check if prompt is empty
+        if not scratchpad_prompt or not scratchpad_prompt.strip():
+            logger.error("Scratchpad retry prompt is empty!")
+            logger.error(f"Template returned: '{scratchpad_prompt}'")
+            logger.error(f"Context: {context}")
+            return AgentResult(
+                success=False,
+                session_id=session_id,
+                output_file="",
+                error_file="",
+                execution_time=0.0,
+                completed_normally=False,
+                requested_help=False,
+                errors=["Empty scratchpad retry prompt"]
+            )
+        
+        # Save prompt for debugging (same pattern as main agent)
+        prompt_debug_file = self.agent_dir / f"scratchpad_retry_prompt_{session_id}.txt"
+        try:
+            with open(prompt_debug_file, 'w') as f:
+                f.write(scratchpad_prompt)
+            logger.debug(f"Saved scratchpad retry prompt to {prompt_debug_file}")
+        except Exception as e:
+            logger.warning(f"Failed to save scratchpad retry prompt: {e}")
+        
+        original_dir = os.getcwd()
+        try:
+            os.chdir(self.agent_dir)
+            
+            # Build command using same pattern as main agent
+            cmd = ["claude", "-p", scratchpad_prompt]
+            cmd.extend([
+                "--allowedTools", "Write,Read,Bash,LS",
+                "--max-turns", "5",
+                "--output-format", "stream-json",
+                "--verbose",
+                "--dangerously-skip-permissions"
+            ])
+            
+            # Debug command
+            logger.info(f"Scratchpad retry command: claude -p [PROMPT] {' '.join(cmd[2:])}")
+            logger.info(f"Working directory: {os.getcwd()}")
+            
+            start_time = time.time()
+            
+            # Run with minimal timeout
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    returncode, all_output = loop.run_until_complete(
+                        self.run_claude_with_realtime_output(cmd, self.agent_dir, "SCRATCHPAD_AGENT")
+                    )
+                finally:
+                    loop.close()
+                    
+                execution_time = time.time() - start_time
+                
+                # Check for completion signal
+                output_text = '\n'.join(all_output)
+                completed_normally = "SCRATCHPAD CREATION COMPLETE" in output_text.upper()
+                
+                return AgentResult(
+                    success=returncode == 0,
+                    session_id=session_id,
+                    output_file="scratchpad_retry_output.log",
+                    error_file="scratchpad_retry_error.log", 
+                    execution_time=execution_time,
+                    completed_normally=completed_normally,
+                    requested_help=False,
+                    errors=[] if returncode == 0 else ["Scratchpad retry failed"]
+                )
+                
+            except Exception as e:
+                logger.error(f"Scratchpad retry error: {e}")
+                return AgentResult(
+                    success=False,
+                    session_id=session_id,
+                    output_file="",
+                    error_file="",
+                    execution_time=time.time() - start_time,
+                    completed_normally=False,
+                    requested_help=False,
+                    errors=[f"Scratchpad retry failed: {e}"]
+                )
+                
+        finally:
+            os.chdir(original_dir)
+
     def save_agent_results(self, agent_result: AgentResult, session_id: str, todos: List[str] = None, task_id: str = None):
             """Save agent results for supervisor to analyze"""
             results_file = self.validate_path(
@@ -942,7 +1166,7 @@ class SupervisorOrchestrator:
         removed_count = 0
         
         # Clean supervisor directory
-        for pattern in ["decision_*.json", "agent_result_*.json", "decision_snapshot_*.json"]:
+        for pattern in ["decision_*.json", "agent_result_*.json", "decision_snapshot_*.json", "session_*.md"]:
             for file in self.supervisor_dir.glob(pattern):
                 try:
                     file.unlink()
@@ -974,6 +1198,7 @@ class SupervisorOrchestrator:
         
         if removed_count > 0:
             logger.info(f"Cleaned up {removed_count} old session files")
+
     
     def cleanup_old_sessions(self, keep_last_n: int = 5):
         """Clean up old session files to save space"""
@@ -981,13 +1206,19 @@ class SupervisorOrchestrator:
         session_files = []
         
         # Collect files from supervisor directory
-        for pattern in ["decision_*.json", "agent_result_*.json"]:
+        for pattern in ["decision_*.json", "agent_result_*.json", "decision_snapshot_*.json", "session_*.md"]:
             for file in self.supervisor_dir.glob(pattern):
                 session_files.append(file)
                 
         # Collect files from agent directory  
         for pattern in ["prompt_*.txt", "output_*.log", "error_*.log"]:
             for file in self.agent_dir.glob(pattern):
+                session_files.append(file)
+        
+        # Collect files from scratchpad directory
+        scratchpad_dir = self.project_root / ".cadence" / "scratchpad"
+        if scratchpad_dir.exists():
+            for file in scratchpad_dir.glob("session_*.md"):
                 session_files.append(file)
                 
         # Extract session IDs and group by session
@@ -1016,9 +1247,36 @@ class SupervisorOrchestrator:
                 try:
                     file.unlink()
                     removed_count += 1
-                    logger.debug(f"Removed old session file: {file}")
+                    logger.debug(f"Removed old file from session {session_id}: {file}")
                 except Exception as e:
                     logger.warning(f"Failed to remove {file}: {e}")
                     
         if removed_count > 0:
-            logger.info(f"Cleaned up {removed_count} old session files")
+            logger.info(f"Cleaned up {removed_count} files from {len(sessions_to_remove)} old sessions")
+    
+    def cleanup_supervisor_logs(self, keep_last_n: int = 10):
+        """Clean up old supervisor log files (session_*.md files)
+        
+        Args:
+            keep_last_n: Number of most recent log files to keep
+        """
+        # Get all supervisor log files
+        log_files = list(self.supervisor_dir.glob("session_*.md"))
+        
+        # Sort by modification time (newest first)
+        log_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+        
+        # Keep only the most recent files
+        files_to_remove = log_files[keep_last_n:]
+        
+        removed_count = 0
+        for file in files_to_remove:
+            try:
+                file.unlink()
+                removed_count += 1
+                logger.debug(f"Removed old supervisor log: {file}")
+            except Exception as e:
+                logger.warning(f"Failed to remove {file}: {e}")
+        
+        if removed_count > 0:
+            logger.info(f"Cleaned up {removed_count} old supervisor log files")

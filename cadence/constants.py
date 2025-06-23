@@ -22,7 +22,7 @@ class OrchestratorDefaults:
 class SupervisorDefaults:
     """Default values for supervisor configuration"""
     MAX_TURNS = 40
-    ANALYSIS_TIMEOUT = 60  # seconds
+    ANALYSIS_TIMEOUT = 600  # seconds (10 minutes)
     EXECUTION_TIMEOUT = 600  # seconds (10 minutes)
     MAX_CONSECUTIVE_ERRORS = 3
     STATUS_CHECK_INTERVAL = 30  # seconds
