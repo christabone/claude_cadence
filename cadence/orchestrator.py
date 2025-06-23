@@ -23,7 +23,7 @@ import asyncio
 from .constants import OrchestratorDefaults, FilePatterns, AgentPromptDefaults
 from .utils import generate_session_id
 from .config import ZenIntegrationConfig
-from .prompts import YAMLPromptLoader, PromptGenerator
+from .prompts import YAMLPromptLoader, PromptGenerator, ExecutionContext
 from .log_utils import Colors
 
 # Set up logging
@@ -1008,7 +1008,6 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
             max_turns = self.config.get("max_turns", OrchestratorDefaults.MAX_AGENT_TURNS)
 
             # Create ExecutionContext properly for both paths
-            from .prompts import ExecutionContext
             context = ExecutionContext(
                 todos=todos,
                 max_turns=max_turns
