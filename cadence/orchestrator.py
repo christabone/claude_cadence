@@ -526,6 +526,8 @@ class SupervisorOrchestrator:
                     context = {
                         "project_root": str(self.project_root),
                         "session_id": session_id,
+                        "iteration": iteration,
+                        "is_first_iteration": iteration == 1,
                         "has_previous_agent_result": previous_agent_result is not None,
                         "agent_success": previous_agent_result.get("success", False) if previous_agent_result else False,
                         "agent_completed_normally": previous_agent_result.get("completed_normally", False) if previous_agent_result else False,

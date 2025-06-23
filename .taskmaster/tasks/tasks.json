@@ -621,7 +621,7 @@
             "description": "Create the server.py file with the AGRMCPServer class implementation and register all tools with appropriate handlers.",
             "dependencies": [],
             "details": "1. Create src/server.py with the AGRMCPServer class\n2. Implement the constructor and _register_tools method\n3. Implement all handler methods (_handle_query_gene, _handle_download_file, etc.)\n4. Create the singleton instance and start/stop functions\n5. Ensure proper error handling and logging throughout",
-            "status": "pending",
+            "status": "in-progress",
             "testStrategy": "Write unit tests to verify server initialization, tool registration, and basic handler functionality with mocked dependencies."
           },
           {
@@ -656,7 +656,7 @@
     ],
     "metadata": {
       "created": "2025-06-21T22:40:58.616Z",
-      "updated": "2025-06-23T17:07:36.783Z",
+      "updated": "2025-06-23T17:50:53.891Z",
       "description": "Tasks for master context"
     }
   }
