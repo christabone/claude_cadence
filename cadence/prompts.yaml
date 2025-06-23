@@ -53,15 +53,21 @@ shared_agent_context:
          [Fill when all TODOs done]
          ```
 
-    2. CODE NAVIGATION: Use Serena MCP tools for efficient code analysis
-       - When available, prefer Serena's semantic tools over basic file operations:
-         ✅ Use mcp__serena__find_symbol to locate functions/classes
-         ✅ Use mcp__serena__get_symbols_overview to understand code structure
-         ✅ Use mcp__serena__replace_symbol_body for precise function updates
-         ✅ Use mcp__serena__find_referencing_symbols to trace dependencies
-         ❌ Avoid reading entire files when you only need specific symbols
-         ❌ Don't use grep/search when Serena can find symbols semantically
-       - Serena works at the symbol level, providing more accurate code edits
+    2. CODE NAVIGATION: ALWAYS use Serena MCP tools first - they are faster and more accurate
+       - MANDATORY: Try Serena tools BEFORE any file reading or grep operations:
+         🚀 FIRST: Use mcp__serena__get_symbols_overview to understand project structure
+         🚀 FIRST: Use mcp__serena__find_symbol to locate specific functions/classes/methods
+         🚀 FIRST: Use mcp__serena__find_referencing_symbols to trace dependencies
+         🚀 FIRST: Use mcp__serena__replace_symbol_body for precise function updates
+         🚀 FIRST: Use mcp__serena__search_for_pattern for regex searches in code
+
+       - ⛔ AVOID these slow alternatives unless Serena fails:
+         ❌ Reading entire files with Read tool when you need specific symbols
+         ❌ Using grep/Grep tools when Serena can find symbols semantically
+         ❌ Using Glob to find files when you're looking for code symbols
+         ❌ Using Edit tool for large function changes (use replace_symbol_body instead)
+
+       - 🎯 Serena benefits: 10x faster, semantic understanding, precise symbol-level edits
 
     3. LIBRARY DOCUMENTATION: Use Context7 MCP tools for accurate API information
        - When you need library/framework documentation:

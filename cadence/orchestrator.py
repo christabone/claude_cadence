@@ -617,9 +617,14 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                     mcp_tools = [f"mcp__{server}__*" for server in mcp_servers]
                     all_tools = basic_tools + mcp_tools
 
+                    # Get supervisor model from config
+                    supervisor_model = self.config.get("supervisor", {}).get("model", "claude-sonnet-4-latest")
+                    logger.info(f"Using supervisor model: {supervisor_model}")
+
                     cmd = [
                         "claude",
                         "-p", supervisor_prompt,
+                        "--model", supervisor_model,
                         "--allowedTools", ",".join(all_tools),
                         "--max-turns", "80",
                         "--output-format", "stream-json",
@@ -872,6 +877,10 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                 with open(prompt_file, 'w') as f:
                     f.write(prompt)
 
+                # Get agent model from config
+                agent_model = self.config.get("agent", {}).get("model", "claude-sonnet-4-latest")
+                logger.info(f"Using agent model: {agent_model}")
+
                 # Build claude command
                 cmd = ["claude"]
 
@@ -884,6 +893,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                     logger.debug("Running agent (first run)")
 
                 cmd.extend([
+                    "--model", agent_model,
                     "--max-turns", str(self.config.get("max_turns", OrchestratorDefaults.MAX_AGENT_TURNS)),
                     "--output-format", "stream-json",
                     "--verbose",

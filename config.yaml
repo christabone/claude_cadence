@@ -30,8 +30,6 @@ agent:
     - grep
     - glob
     - search
-    - todo_read
-    - todo_write
     - mcp
     - WebFetch
   # Additional claude CLI flags
@@ -53,6 +51,7 @@ supervisor:
     - grep
     - glob
     - search
+    - mcp
     - WebFetch
   # Confidence threshold for intervention (0.0-1.0)
   intervention_threshold: 0.7

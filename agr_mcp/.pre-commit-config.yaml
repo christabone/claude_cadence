@@ -1,0 +1,25 @@
+repos:
+  - repo: https://github.com/zricethezav/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+  - repo: local
+    hooks:
+      - id: check-uuid
+        name: Check for UUIDs (excluding analysis/reference docs and external repos)
+        entry: >
+          bash -c 'if grep -rE "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+          --exclude-dir=.git --exclude-dir=analysis --exclude-dir=logs
+          --exclude-dir=venv --exclude-dir=__pycache__ --exclude-dir=.pytest_cache . |
+          grep -v "# Example:" | grep -v "# Reference:" | grep -v ".gitleaks.toml"; then
+          echo "ERROR: UUID detected in commit."; exit 1; fi'
+        language: system
+        pass_filenames: false

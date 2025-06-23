@@ -116,7 +116,7 @@ local_notes.md
 TODO.local.md
 
 # Cloned repositories
-agr_mcp/
+# agr_mcp/  # Removed to allow tracking AGR MCP project
 
 # Local scripts and PRD
 scripts/
@@ -144,4 +144,4 @@ node_modules/
 
 # Task files
 # tasks.json
-# tasks/ 
+# tasks/
