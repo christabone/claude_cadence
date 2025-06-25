@@ -470,7 +470,7 @@ supervisor_prompts:
            * Present ONLY the error messages and context
            * Do NOT interpret what might be wrong
            * Let the model diagnose without bias
-         - If design confusion: Call mcp__zen__consensus with models=["o3", "gemini-2.5-pro"] 
+         - If design confusion: Call mcp__zen__consensus with models=["o3", "gemini-2.5-pro"]
            * Present ONLY the design options/questions
            * Do NOT indicate preference
            * Get unbiased perspectives

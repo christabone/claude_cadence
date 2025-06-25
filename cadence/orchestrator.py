@@ -319,12 +319,12 @@ class SupervisorOrchestrator:
         logger.info("Configuration:")
         logger.info(f"  Supervisor model: {self.config.get('supervisor', {}).get('model', 'NOT SET')}")
         logger.info(f"  Agent model: {self.config.get('agent', {}).get('model', 'NOT SET')}")
-        
+
         # Group turn configurations together (orchestrator → supervisor → agent)
         logger.info(f"  Max orchestrator iterations: {self.config.get('orchestration', {}).get('max_iterations', 100)}")
         logger.info(f"  Max supervisor turns: {self.config.get('execution', {}).get('max_supervisor_turns', 'NOT SET')}")
         logger.info(f"  Max agent turns: {self.config.get('execution', {}).get('max_agent_turns', 'NOT SET')}")
-        
+
         logger.info(f"  Agent timeout: {self.config.get('execution', {}).get('timeout', 'NOT SET')}s")
         logger.info(f"  Code review frequency: {self.config.get('zen_integration', {}).get('code_review_frequency', 'NOT SET')}")
 
@@ -1189,14 +1189,14 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
         if scratchpad_file.exists():
             logger.debug(f"Agent scratchpad found at expected location: {scratchpad_file}")
             return True
-        
+
         # Fallback: search recursively for the scratchpad file
         logger.warning(f"Agent scratchpad not found at expected location: {scratchpad_file}")
         logger.info("Searching recursively for scratchpad file...")
-        
+
         # Search pattern for the specific session file
         search_pattern = f"**/session_{session_id}.md"
-        
+
         # Search under the project root
         for found_file in self.project_root.glob(search_pattern):
             # Verify it's in a .cadence/scratchpad directory structure
@@ -1205,7 +1205,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                 logger.warning(f"Agent created scratchpad at {found_file} instead of {scratchpad_file}")
                 # TODO: Consider copying the file to the expected location
                 return True
-        
+
         logger.warning(f"Agent scratchpad missing: could not find session_{session_id}.md anywhere")
         logger.warning(f"Agent claimed success but failed to create required scratchpad")
         return False
