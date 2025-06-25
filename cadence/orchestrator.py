@@ -38,7 +38,7 @@ class SupervisorDecision:
     task_id: str = ""
     task_title: str = ""
     subtasks: List[Dict] = None  # List of subtask dicts with id, title, description
-    project_root: str = ""
+    project_path: str = ""  # Unified project path
     guidance: str = ""
     session_id: str = ""
     reason: str = ""
@@ -420,7 +420,7 @@ class SupervisorOrchestrator:
                         "task_id": decision.task_id,
                         "task_title": decision.task_title,
                         "subtasks": decision.subtasks,
-                        "project_root": decision.project_root,
+                        "project_root": decision.project_path,  # Unified as project_path
                         "guidance": decision.guidance,
                         "session_id": decision.session_id,
                         "timestamp": datetime.now().isoformat()
@@ -442,7 +442,7 @@ class SupervisorOrchestrator:
                     use_continue=(iteration > 1),
                     task_id=decision.task_id,
                     subtasks=decision.subtasks,
-                    project_root=decision.project_root
+                    project_root=decision.project_path  # Pass as project_path
                 )
 
                 # Check if agent quit too quickly (likely an error)
@@ -472,7 +472,7 @@ class SupervisorOrchestrator:
                     retry_result = self.retry_agent_for_scratchpad(
                         session_id=self.current_session_id,
                         task_id=decision.task_id,
-                        project_root=str(self.project_root)
+                        project_path=str(self.project_root)
                     )
 
                     if not retry_result.success:
@@ -555,7 +555,7 @@ class SupervisorOrchestrator:
 
                     # Build prompt using YAML templates
                     context = {
-                        "project_root": str(self.project_root),
+                        "project_path": str(self.project_root),  # Unified project path
                         "session_id": session_id,
                         "iteration": iteration,
                         "is_first_iteration": iteration == 1,
@@ -610,7 +610,7 @@ class SupervisorOrchestrator:
                     # If this is a retry, use a shorter prompt to avoid token limits
                     if json_retry_count > 0:
                         # Create a minimal retry prompt to avoid token limits
-                        minimal_retry_prompt = f"""You are the Task Supervisor. Project root: {context['project_root']}
+                        minimal_retry_prompt = f"""You are the Task Supervisor. Project root: {context['project_path']}
 
 CRITICAL: Your previous output had invalid JSON formatting.
 Please analyze the current task state and output ONLY a valid JSON object.
@@ -622,7 +622,7 @@ For "execute" action:
     "task_id": "X",
     "task_title": "Title",
     "subtasks": [{{"id": "X.Y", "title": "...", "description": "..."}}],
-    "project_root": "{context['project_root']}",
+    "project_root": "{context['project_path']}",
     "guidance": "Brief guidance",
     "session_id": "{context['session_id']}",
     "reason": "Why this action"
@@ -684,15 +684,21 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                         "--dangerously-skip-permissions"  # Skip permission prompts
                     ]
 
-                    # Add --continue flag if not first run OR if this is a retry
-                    if use_continue or json_retry_count > 0:
+                    # Check config for supervisor continuation setting
+                    supervisor_use_continue = supervisor_config.get("use_continue", True)  # Default to True for backward compatibility
+
+                    # Add --continue flag based on config and conditions
+                    if supervisor_use_continue and (use_continue or json_retry_count > 0):
                         cmd.append("--continue")
                         if json_retry_count > 0:
                             logger.warning(f"Retrying supervisor with --continue due to JSON parsing error (attempt {json_retry_count + 1})")
                         else:
                             logger.debug("Running supervisor with --continue flag")
                     else:
-                        logger.debug("Running supervisor (first run)")
+                        if not supervisor_use_continue:
+                            logger.debug("Running supervisor without --continue flag (disabled in config)")
+                        else:
+                            logger.debug("Running supervisor (first run)")
 
 
                     # Run supervisor
@@ -850,7 +856,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                         if decision_data.get('action') == 'execute':
                             # For execute action, check for new subtasks structure
                             if 'subtasks' in decision_data:
-                                required_fields = ['action', 'task_id', 'task_title', 'subtasks', 'project_root', 'session_id', 'reason']
+                                required_fields = ['action', 'task_id', 'task_title', 'subtasks', 'project_root', 'session_id', 'reason']  # Note: project_root is kept for backward compatibility in JSON
                             else:
                                 # Backward compatibility with todos
                                 required_fields = ['action', 'todos', 'guidance', 'task_id', 'session_id', 'reason']
@@ -888,6 +894,10 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                 quick_quit_threshold = self.config.get("orchestration", {}).get("quick_quit_seconds", OrchestratorDefaults.QUICK_QUIT_SECONDS)
 
                 # Create decision object
+                # Map project_root from JSON to project_path for internal use
+                if 'project_root' in decision_data and 'project_path' not in decision_data:
+                    decision_data['project_path'] = decision_data.pop('project_root')
+
                 decision = SupervisorDecision(**decision_data)
                 decision.execution_time = supervisor_execution_time
                 decision.quit_too_quickly = supervisor_execution_time < quick_quit_threshold
@@ -942,13 +952,19 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                 # Build claude command
                 cmd = ["claude"]
 
-                # Add --continue flag if not first run
-                if use_continue:
+                # Check config for agent continuation setting
+                agent_use_continue = agent_config.get("use_continue", True)  # Default to True for backward compatibility
+
+                # Add --continue flag based on config and conditions
+                if agent_use_continue and use_continue:
                     cmd.extend(["-c", "-p", prompt])
                     logger.debug("Running agent with --continue flag")
                 else:
                     cmd.extend(["-p", prompt])
-                    logger.debug("Running agent (first run)")
+                    if not agent_use_continue:
+                        logger.debug("Running agent without --continue flag (disabled in config)")
+                    else:
+                        logger.debug("Running agent (first run)")
 
                 cmd.extend([
                     "--model", agent_model,
@@ -1080,7 +1096,8 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
             # Create ExecutionContext properly for both paths
             context = ExecutionContext(
                 todos=todos,
-                max_turns=max_turns
+                max_turns=max_turns,
+                project_path=project_root or str(self.project_root)  # For Serena activation
             )
 
             if use_continue:
@@ -1172,7 +1189,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
             logger.warning(f"Agent claimed success but failed to create required scratchpad")
             return False
 
-    def retry_agent_for_scratchpad(self, session_id: str, task_id: str, project_root: str) -> AgentResult:
+    def retry_agent_for_scratchpad(self, session_id: str, task_id: str, project_path: str) -> AgentResult:
         """Retry agent with focused prompt to create missing scratchpad"""
         logger.info("Running focused agent retry to create missing scratchpad")
 
@@ -1218,7 +1235,8 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
             os.chdir(self.agent_dir)
 
             # Build command using same pattern as main agent
-            cmd = ["claude", "-p", scratchpad_prompt]
+            # ALWAYS use --continue for scratchpad retry to maintain context
+            cmd = ["claude", "-c", "-p", scratchpad_prompt]
             cmd.extend([
                 "--allowedTools", "Write,Read,Bash,LS",
                 "--max-turns", "5",
@@ -1228,8 +1246,9 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
             ])
 
             # Debug command
-            logger.info(f"Scratchpad retry command: claude -p [PROMPT] {' '.join(cmd[2:])}")
+            logger.info(f"Scratchpad retry command: claude -c -p [PROMPT] {' '.join(cmd[3:])}")
             logger.info(f"Working directory: {os.getcwd()}")
+            logger.info("Using --continue flag for scratchpad retry to maintain context")
 
             start_time = time.time()
 

@@ -82,24 +82,9 @@ def main():
     # Resolve paths
     project_root = Path(args.project_root).resolve()
 
-    # Handle task file - use default if not specified
-    if args.task_file:
-        task_file = Path(args.task_file)
-        # Make task file absolute if relative
-        if not task_file.is_absolute():
-            task_file = project_root / task_file
-    else:
-        # Use default location
-        task_file = project_root / ".taskmaster" / "tasks" / "tasks.json"
-
-    # Validate paths
+    # Validate initial project root exists
     if not project_root.exists():
         logger.error(f"Project root does not exist: {project_root}")
-        return 1
-
-    if not task_file.exists():
-        logger.error(f"Task file does not exist: {task_file}")
-        logger.error("Please ensure Task Master is initialized and tasks.json exists")
         return 1
 
     # Load configuration
@@ -120,6 +105,47 @@ def main():
             orchestrator_config = yaml.safe_load(f) or {}
     except Exception as e:
         logger.error(f"Failed to load configuration: {e}")
+        return 1
+
+    # Override project_root with config value if available
+    if 'project' in orchestrator_config and 'root_directory' in orchestrator_config['project']:
+        # Make path handling more robust
+        config_path_str = orchestrator_config['project']['root_directory']
+        config_project_path = Path(config_path_str).expanduser()
+
+        # If relative, resolve relative to the config file's directory
+        if not config_project_path.is_absolute():
+            config_project_path = config_path.parent / config_project_path
+
+        config_project_root = config_project_path.resolve()
+
+        if config_project_root.exists():
+            logger.info(f"Using project root from config: {config_project_root}")
+            project_root = config_project_root
+        else:
+            logger.error(f"Project root from config does not exist: {config_project_root}")
+            logger.error("Please check your config.yaml and ensure the project.root_directory path exists")
+            return 1
+
+    # NOW handle task file after project_root is finalized
+    if args.task_file:
+        task_file = Path(args.task_file)
+        # Make task file absolute if relative
+        if not task_file.is_absolute():
+            task_file = project_root / task_file
+    else:
+        # Check if config has a custom taskmaster_file
+        taskmaster_file = orchestrator_config.get('project', {}).get('taskmaster_file')
+        if taskmaster_file:
+            task_file = project_root / taskmaster_file
+        else:
+            # Use default location with the FINAL project_root
+            task_file = project_root / ".taskmaster" / "tasks" / "tasks.json"
+
+    # Validate task file exists
+    if not task_file.exists():
+        logger.error(f"Task file does not exist: {task_file}")
+        logger.error("Please ensure Task Master is initialized and tasks.json exists")
         return 1
 
     # Add command line max_iterations to the config

@@ -29,6 +29,7 @@ class ExecutionContext:
     issues_encountered: List[str] = field(default_factory=list)
     previous_guidance: List[str] = field(default_factory=list)
     continuation_context: Optional[str] = None
+    project_path: Optional[str] = None  # For Serena activation and general use
 
 
 class YAMLPromptLoader:
@@ -164,7 +165,7 @@ class PromptGenerator:
                 'max_turns': context.max_turns,
                 'session_id': session_id,
                 'task_numbers': task_numbers if task_numbers else "N/A",
-                'project_root': project_root if project_root else os.getcwd()
+                'project_path': context.project_path   # Unified project path
             }
 
             # Generate TODO list
@@ -287,7 +288,8 @@ class PromptGenerator:
                 'supervisor_analysis': self._generate_supervisor_analysis_section(supervisor_analysis, analysis_guidance),
                 'task_status_section': self._generate_task_status_section(context),
                 'remaining_todos': self._generate_remaining_todos_section(context, supervisor_analysis),
-                'issues_section': self._generate_issues_section(context)
+                'issues_section': self._generate_issues_section(context),
+                'project_path': context.project_path  # Use context.project_path directly
             }
 
             # Build continuation prompt from sections

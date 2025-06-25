@@ -1,6 +1,17 @@
 # Claude Cadence Configuration
 # This file defines the default settings for checkpoint supervision
 
+# Project settings
+project:
+  # The root directory of the project being supervised
+  # This should be the absolute path to your project (e.g., /home/user/my_project)
+  # Both TaskMaster files and Serena will use this path
+  root_directory: "/home/ctabone/programming/claude_code/claude_cadence/agr_mcp"
+
+  # Optional: Override the default TaskMaster directory
+  # If not set, will use {root_directory}/.taskmaster/tasks/tasks.json
+  # taskmaster_file: ".taskmaster/tasks/tasks.json"
+
 # Execution settings
 execution:
   # Safety limit: Maximum turns before forcing completion
@@ -35,6 +46,9 @@ agent:
   # Additional claude CLI flags
   extra_flags:
     - "--dangerously-skip-permissions"
+  # Whether to use --continue flag for agent sessions
+  # Set to false to start fresh each time (saves tokens)
+  use_continue: false
 
 # Supervisor configuration
 supervisor:
@@ -52,6 +66,9 @@ supervisor:
     - search
     - mcp
     - WebFetch
+  # Whether to use --continue flag for supervisor sessions
+  # Set to false to start fresh each time (saves tokens)
+  use_continue: false
   # Confidence threshold for intervention (0.0-1.0)
   intervention_threshold: 0.7
   # Whether to show detailed analysis

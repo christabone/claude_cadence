@@ -124,6 +124,10 @@ class TaskDetectionConfig:
 @dataclass
 class CadenceConfig:
     """Complete Cadence configuration"""
+    project: Dict[str, Any] = field(default_factory=lambda: {
+        "root_directory": os.getcwd(),  # Default to current directory
+        "taskmaster_file": None  # Will use default if None
+    })
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     supervisor: SupervisorConfig = field(default_factory=SupervisorConfig)
