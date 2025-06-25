@@ -14,10 +14,15 @@ project:
 
 # Execution settings
 execution:
-  # Safety limit: Maximum turns before forcing completion
-  # This is NOT a target - agents should complete tasks naturally
-  # This only prevents runaway execution
-  max_turns: 80
+  # Maximum turns for supervisor when running in direct execution mode
+  # (When supervisor executes tasks itself, not in orchestrated mode)
+  # This is NOT a target - supervisors should complete tasks naturally
+  # This only applies when running supervisor directly, not in orchestrated mode
+  max_supervisor_turns: 80
+  # Maximum turns for agent execution (safety limit)
+  # Default: 120 turns to allow complex tasks to complete
+  # This is used when agent is run by the orchestrator
+  max_agent_turns: 120
   # Timeout for each execution period (seconds)
   timeout: 600
   # Timeout for subprocess calls (seconds)
@@ -200,6 +205,8 @@ orchestration:
   # Enable zen assistance in orchestration
   enable_zen_assistance: true
   # Maximum orchestration iterations before stopping
+  # This is how many times the orchestrator will loop between supervisor and agent
+  # Each iteration: supervisor analyzes → decides action → agent executes → repeat
   max_iterations: 100
   # Orchestrated mode (required for new architecture)
   mode: "orchestrated"

@@ -44,8 +44,8 @@ shared_agent_context:
     EXECUTION GUIDELINES:
 
     1. FIRST ACTION: Create your scratchpad file
-       - Create directory: .cadence/scratchpad/
-       - Create file: .cadence/scratchpad/session_{session_id}.md
+       - Create directory: {project_path}/.cadence/scratchpad/
+       - Create file: {project_path}/.cadence/scratchpad/session_{session_id}.md
        - Initial content:
          ```
          # Task Execution Scratchpad
@@ -189,7 +189,7 @@ agent_prompts:
       - "{todo_list}"  # Generated dynamically
       - |
         === BEGIN WORK ===
-        1. FIRST: Create your scratchpad file at .cadence/scratchpad/session_{session_id}.md (full path: {project_path}/.cadence/scratchpad/session_{session_id}.md)
+        1. FIRST: Create your scratchpad file at {project_path}/.cadence/scratchpad/session_{session_id}.md
         2. Work through TODOs systematically, updating your scratchpad as you go
         3. Remember: You're part of a supervised workflow. Focus on your assigned tasks.
         4. Quality and safety are more important than speed.
@@ -209,8 +209,8 @@ agent_prompts:
         === CONTINUATION CONTEXT ===
         {continuation_type}
         Session ID: {session_id}
-        Previous scratchpad: .cadence/scratchpad/session_{previous_session_id}.md
-        Current scratchpad: .cadence/scratchpad/session_{session_id}.md
+        Previous scratchpad: {project_path}/.cadence/scratchpad/session_{previous_session_id}.md
+        Current scratchpad: {project_path}/.cadence/scratchpad/session_{session_id}.md
       - "{supervisor_analysis}"  # Dynamic based on completion status
       - "{task_status_section}"  # Shows completed vs remaining
       - "{remaining_todos}"  # Updated TODO list
@@ -231,7 +231,7 @@ todo_templates:
 
     {todo_items}
 
-    REMEMBER: First create your scratchpad at .cadence/scratchpad/session_{session_id}.md (absolute path: {project_path}/.cadence/scratchpad/session_{session_id}.md)
+    REMEMBER: First create your scratchpad at {project_path}/.cadence/scratchpad/session_{session_id}.md
     Focus on completing these systematically.
     When all are done, update your scratchpad and state 'ALL TASKS COMPLETE'.
 
@@ -362,9 +362,9 @@ supervisor_prompts:
          - Could the agent have completed but forgot the exact phrase?
 
       2. CHECK SCRATCHPAD AND AGENT LOGS:
-         - First try to read: .cadence/scratchpad/session_{session_id}.md
+         - First try to read: {project_path}/.cadence/scratchpad/session_{session_id}.md
          - If scratchpad DOES NOT EXIST, this means the agent failed to create it (despite instructions)
-         - IMPORTANT: Check agent logs at .cadence/agent/output_{session_id}.log
+         - IMPORTANT: Check agent logs at {project_path}/.cadence/agent/output_{session_id}.log
          - Look for evidence the agent actually ran: tool calls, task work, file modifications
          - If agent logs show activity but no scratchpad = agent ignored instructions
          - If no agent logs exist = agent never ran at all
@@ -423,7 +423,7 @@ supervisor_prompts:
          - This shows exactly what task/subtasks were assigned to the agent
 
       2. {% if agent_completed_normally %}Read the agent's scratchpad to understand what was completed:
-         - Read: .cadence/scratchpad/session_{session_id}.md (absolute path: {project_path}/.cadence/scratchpad/session_{session_id}.md)
+         - Read: {project_path}/.cadence/scratchpad/session_{session_id}.md
          - Look for "ALL TASKS COMPLETE" which means all TODOs were finished
          - Look for specific TODO completions mentioned in the scratchpad
          - NOTE: If scratchpad doesn't exist, the agent likely never started or failed early
@@ -466,14 +466,22 @@ supervisor_prompts:
            * Reminder to declare "ALL TASKS COMPLETE" when done
 
          FOR SEEKING HELP:
-         - If technical blocker: Call mcp__zen__debug with specific error details
-         - If design confusion: Call mcp__zen__consensus with options
-         - If complex cutoff: Call mcp__zen__analyze with progress summary
+         - If technical blocker: Call mcp__zen__debug with model="o3" (use full o3, NOT o3-mini)
+           * Present ONLY the error messages and context
+           * Do NOT interpret what might be wrong
+           * Let the model diagnose without bias
+         - If design confusion: Call mcp__zen__consensus with models=["o3", "gemini-2.5-pro"] 
+           * Present ONLY the design options/questions
+           * Do NOT indicate preference
+           * Get unbiased perspectives
+         - If complex cutoff: Call mcp__zen__analyze with model="o3" with progress summary
+           * Present ONLY factual completion status
+           * Let the model assess without bias
          - Document the blocker in your skip reason
 
          FOR TASK COMPLETION (rare but possible):
          - If all subtasks show "done" and work verified complete
-         - Run code review: mcp__zen__review
+         - Run code review: mcp__zen__codereview with model="o3" (full version, not o3-mini)
          - Only mark complete after review passes
       {% endif %}
 
@@ -567,10 +575,17 @@ supervisor_prompts:
            - If your review passes, update the task status to "done":
              mcp__taskmaster-ai__set_task_status --id=<task_id> --status=done --projectRoot={project_path}
            - Then run AI-powered code reviews using multiple models:
-             * First: mcp__zen__codereview with model="o3" for thorough analysis
-             * Second: mcp__zen__codereview with model="pro" for expert validation
+             * First: mcp__zen__codereview with model="o3" for thorough analysis (use full o3, NOT o3-mini)
+             * Second: mcp__zen__codereview with model="gemini-2.5-pro" for expert validation (use gemini-2.5-pro specifically, NOT flash or older versions)
+             * CRITICAL: When calling these reviews, present ONLY the facts:
+               - What the agent was asked to do (the exact TODOs)
+               - What files were created/modified
+               - What the implementation does functionally
+               - DO NOT bias the review with your own assessment
+               - DO NOT mention whether you think it's good or bad
+               - Let the models form their own unbiased opinions
              * Compare both results with your own review to form a comprehensive assessment
-           - IMPORTANT: Wait for ALL THREE reviews (yours, o3, and pro) to complete before proceeding
+           - IMPORTANT: Wait for ALL THREE reviews (yours, o3, and gemini-2.5-pro) to complete before proceeding
 
            - CRITICAL REVIEW EVALUATION GUIDELINES:
              * Reviews are NOT pass/fail gates - they provide guidance for improvement
@@ -611,10 +626,17 @@ supervisor_prompts:
            * Check that the code meets the project requirements
            * Ensure consistent code quality throughout
         2. Then run final AI-powered code reviews using multiple models:
-           * First: mcp__zen__codereview with model="o3" for thorough project analysis
-           * Second: mcp__zen__codereview with model="pro" for expert project validation
+           * First: mcp__zen__codereview with model="o3" for thorough project analysis (use full o3, NOT o3-mini)
+           * Second: mcp__zen__codereview with model="gemini-2.5-pro" for expert project validation (use gemini-2.5-pro specifically, NOT flash or older versions)
+           * CRITICAL: When calling these reviews, present ONLY the facts:
+             - The original project requirements from PRD
+             - What was implemented across all tasks
+             - The final state of the codebase
+             - DO NOT bias the review with your own assessment
+             - DO NOT mention whether you think it's good or bad
+             - Let the models form their own unbiased opinions
            * Compare both results with your own review to form a comprehensive assessment
-        3. IMPORTANT: Wait for ALL THREE reviews (yours, o3, and pro) to complete before proceeding
+        3. IMPORTANT: Wait for ALL THREE reviews (yours, o3, and gemini-2.5-pro) to complete before proceeding
 
         4. CRITICAL PROJECT REVIEW EVALUATION:
            * Focus on SHOWSTOPPER issues only:
@@ -665,10 +687,14 @@ supervisor_prompts:
       Since the agent didn't complete normally, consider using zen analysis:
 
       1. Call zen analyze for cutoff analysis:
-         mcp__zen__analyze
-         - Provide cutoff reason: "Agent hit {{ max_turns }} turn limit"
-         - Include what you found from logs/Task Master
-         - Get recommendations on how to proceed
+         mcp__zen__analyze with model="o3" (use full o3, NOT o3-mini)
+         - Present ONLY factual information:
+           * Agent was cut off at {{ max_turns }} turn limit
+           * List what TODOs were assigned
+           * List what was completed based on scratchpad/logs
+           * List what remains incomplete
+           * DO NOT interpret or judge the agent's performance
+         - Get unbiased recommendations on how to proceed
 
       2. Based on zen analysis, decide whether to:
          - Re-dispatch agent with remaining work
@@ -681,7 +707,17 @@ supervisor_prompts:
 
       CRITICAL GUIDANCE FOR ZEN USAGE:
       If you determine that Zen assistance is needed:
-      - For direct help requests, you can call zen tools directly (e.g., mcp__zen__debug)
+      - For direct help requests, you can call zen tools directly
+      - ALWAYS specify exact models:
+        * For debugging: mcp__zen__debug with model="o3" (full version)
+        * For analysis: mcp__zen__analyze with model="o3" (full version)
+        * For consensus: mcp__zen__consensus with models=["o3", "gemini-2.5-pro"]
+        * For code review: mcp__zen__codereview with model="o3" or "gemini-2.5-pro"
+      - Present ONLY factual information without bias:
+        * State what was requested
+        * State what was done
+        * State what errors/issues occurred
+        * DO NOT interpret or judge performance
       - Stay STRICTLY focused on the specific task at hand
       - Do NOT expand scope based on Zen's suggestions
       - Focus ONLY on critical fixes needed to complete the current task
@@ -737,7 +773,7 @@ supervisor_prompts:
       - The project_root field tells the agent where Task Master files are located
       - If ALL Task Master tasks show status "done", set action to "complete" AND create .cadence/project_complete.marker
       - If no tasks have pending subtasks, set action to "skip"
-      - For code reviews, call mcp__zen__review directly when instructed
+      - For code reviews, call mcp__zen__codereview with model="o3" or "gemini-2.5-pro" as instructed
       - The orchestrator will continue running until you signal completion with the marker file
 
       FINAL REMINDER: END YOUR RESPONSE WITH THE JSON DECISION OBJECT ONLY.
@@ -749,7 +785,7 @@ supervisor_prompts:
         === SUPERVISOR ANALYSIS TASK ===
         You are a senior software architect reviewing an agent's work.
 
-        IMPORTANT: Check the scratchpad file at: .cadence/scratchpad/session_{session_id}.md
+        IMPORTANT: Check the scratchpad file at: {project_path}/.cadence/scratchpad/session_{session_id}.md
         - If you see "ALL TASKS COMPLETE" in the scratchpad, the agent finished normally
         - If you DON'T see this, the agent may have been interrupted or hit the turn limit
         - Look for "HELP NEEDED" or "Status: STUCK" - the agent may need assistance
@@ -773,7 +809,7 @@ supervisor_prompts:
       - |
         === ANALYSIS REQUIRED ===
 
-        FIRST: Read the scratchpad at .cadence/scratchpad/session_{session_id}.md
+        FIRST: Read the scratchpad at {project_path}/.cadence/scratchpad/session_{session_id}.md
 
         Then provide analysis covering:
         1. What TODOs were completed (based on scratchpad)?

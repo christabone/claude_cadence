@@ -34,7 +34,8 @@ SESSION_FILE_PREFIX = "session_"
 @dataclass
 class ExecutionConfig:
     """Execution-related configuration"""
-    max_turns: int = 40
+    max_supervisor_turns: int = 80  # For supervisor direct execution mode
+    max_agent_turns: int = 120  # For agent execution (orchestrated mode)
     timeout: int = 600
     save_logs: bool = True
     log_dir: str = ".cadence/logs"
@@ -51,6 +52,7 @@ class AgentConfig:
         "todo_read", "todo_write", "mcp"
     ])
     extra_flags: List[str] = field(default_factory=lambda: ["--dangerously-skip-permissions"])
+    use_continue: bool = False  # Whether to use --continue flag for agent sessions
 
 
 @dataclass
@@ -102,6 +104,19 @@ class SupervisorConfig:
         "check_blockers": True
     })
     zen_integration: ZenIntegrationConfig = field(default_factory=ZenIntegrationConfig)
+    use_continue: bool = False  # Whether to use --continue flag for supervisor sessions
+
+
+@dataclass
+class OrchestrationConfig:
+    """Orchestration configuration"""
+    supervisor_dir: str = ".cadence/supervisor"
+    agent_dir: str = ".cadence/agent"
+    decision_format: str = "json"
+    enable_zen_assistance: bool = True
+    max_iterations: int = 100
+    mode: str = "orchestrated"
+    quick_quit_seconds: float = 10.0
 
 
 @dataclass
@@ -172,6 +187,7 @@ class CadenceConfig:
         "save_raw_output": False,
         "pretty_json": True
     })
+    orchestration: OrchestrationConfig = field(default_factory=OrchestrationConfig)
 
 
 class ConfigLoader:

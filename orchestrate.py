@@ -170,7 +170,7 @@ def main():
         print(f"  - {project_root / '.cadence' / 'agent'}")
         print("\nWould start orchestration loop with:")
         print(f"  - Max iterations: {args.max_iterations}")
-        print(f"  - Max turns per agent: {orchestrator_config.get('execution', {}).get('max_turns')}")
+        print(f"  - Max turns per agent: {orchestrator_config.get('execution', {}).get('max_agent_turns', 120)}")
         return 0
 
     try:

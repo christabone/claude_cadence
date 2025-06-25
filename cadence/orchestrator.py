@@ -319,9 +319,13 @@ class SupervisorOrchestrator:
         logger.info("Configuration:")
         logger.info(f"  Supervisor model: {self.config.get('supervisor', {}).get('model', 'NOT SET')}")
         logger.info(f"  Agent model: {self.config.get('agent', {}).get('model', 'NOT SET')}")
-        logger.info(f"  Max turns per agent: {self.config.get('execution', {}).get('max_turns', 'NOT SET')}")
+        
+        # Group turn configurations together (orchestrator → supervisor → agent)
+        logger.info(f"  Max orchestrator iterations: {self.config.get('orchestration', {}).get('max_iterations', 100)}")
+        logger.info(f"  Max supervisor turns: {self.config.get('execution', {}).get('max_supervisor_turns', 'NOT SET')}")
+        logger.info(f"  Max agent turns: {self.config.get('execution', {}).get('max_agent_turns', 'NOT SET')}")
+        
         logger.info(f"  Agent timeout: {self.config.get('execution', {}).get('timeout', 'NOT SET')}s")
-        logger.info(f"  Max orchestration iterations: {self.config.get('orchestration', {}).get('max_iterations', 100)}")
         logger.info(f"  Code review frequency: {self.config.get('zen_integration', {}).get('code_review_frequency', 'NOT SET')}")
 
         # Display MCP servers if configured
@@ -356,7 +360,7 @@ class SupervisorOrchestrator:
         self.state["last_session_id"] = self.current_session_id
         self.save_state()
 
-        max_iterations = self.config.get("max_iterations", OrchestratorDefaults.MAX_ITERATIONS)
+        max_iterations = self.config.get("orchestration", {}).get("max_iterations", 100)
         iteration = 0
 
         # Define completion marker file
@@ -564,7 +568,7 @@ class SupervisorOrchestrator:
                         "agent_completed_normally": previous_agent_result.get("completed_normally", False) if previous_agent_result else False,
                         "agent_todos": previous_agent_result.get("todos", []) if previous_agent_result else [],
                         "agent_task_id": previous_agent_result.get("task_id", "") if previous_agent_result else "",
-                        "max_turns": self.config.get("execution", {}).get("max_turns", 80)
+                        "max_turns": self.config.get("execution", {}).get("max_agent_turns", 120)  # Agent's turn limit for supervisor context
                     }
 
                     # Get base prompt
@@ -891,7 +895,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
 
                 # Calculate execution time
                 supervisor_execution_time = time.time() - supervisor_start_time
-                quick_quit_threshold = self.config.get("orchestration", {}).get("quick_quit_seconds", OrchestratorDefaults.QUICK_QUIT_SECONDS)
+                quick_quit_threshold = self.config.get("orchestration", {}).get("quick_quit_seconds", 10.0)
 
                 # Create decision object
                 # Map project_root from JSON to project_path for internal use
@@ -968,7 +972,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
 
                 cmd.extend([
                     "--model", agent_model,
-                    "--max-turns", str(self.config.get("max_turns", OrchestratorDefaults.MAX_AGENT_TURNS)),
+                    "--max-turns", str(self.config.get("execution", {}).get("max_agent_turns", 120)),
                     "--output-format", "stream-json",
                     "--verbose",
                     "--dangerously-skip-permissions"  # Skip permission prompts
@@ -1068,7 +1072,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                     completed_normally=completed_normally,
                     requested_help=requested_help,
                     errors=errors,
-                    quit_too_quickly=execution_time < self.config.get("orchestration", {}).get("quick_quit_seconds", OrchestratorDefaults.QUICK_QUIT_SECONDS)
+                    quit_too_quickly=execution_time < self.config.get("orchestration", {}).get("quick_quit_seconds", 10.0)
                 )
 
                 logger.info(f"Agent execution complete in {execution_time:.2f}s")
@@ -1091,7 +1095,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
             prompt_generator = PromptGenerator(self.prompt_loader)
 
             session_id = self.current_session_id if hasattr(self, 'current_session_id') else "unknown"
-            max_turns = self.config.get("max_turns", OrchestratorDefaults.MAX_AGENT_TURNS)
+            max_turns = self.config.get("execution", {}).get("max_agent_turns", 120)
 
             # Create ExecutionContext properly for both paths
             context = ExecutionContext(
@@ -1179,15 +1183,32 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
 
     def validate_agent_scratchpad(self, session_id: str, agent_result: AgentResult) -> bool:
         """Validate that agent created required scratchpad file"""
+        # First check the expected location
         scratchpad_file = self.project_root / ".cadence" / "scratchpad" / f"session_{session_id}.md"
 
         if scratchpad_file.exists():
-            logger.debug(f"Agent scratchpad found: {scratchpad_file}")
+            logger.debug(f"Agent scratchpad found at expected location: {scratchpad_file}")
             return True
-        else:
-            logger.warning(f"Agent scratchpad missing: {scratchpad_file}")
-            logger.warning(f"Agent claimed success but failed to create required scratchpad")
-            return False
+        
+        # Fallback: search recursively for the scratchpad file
+        logger.warning(f"Agent scratchpad not found at expected location: {scratchpad_file}")
+        logger.info("Searching recursively for scratchpad file...")
+        
+        # Search pattern for the specific session file
+        search_pattern = f"**/session_{session_id}.md"
+        
+        # Search under the project root
+        for found_file in self.project_root.glob(search_pattern):
+            # Verify it's in a .cadence/scratchpad directory structure
+            if ".cadence" in found_file.parts and "scratchpad" in found_file.parts:
+                logger.info(f"Found scratchpad at alternate location: {found_file}")
+                logger.warning(f"Agent created scratchpad at {found_file} instead of {scratchpad_file}")
+                # TODO: Consider copying the file to the expected location
+                return True
+        
+        logger.warning(f"Agent scratchpad missing: could not find session_{session_id}.md anywhere")
+        logger.warning(f"Agent claimed success but failed to create required scratchpad")
+        return False
 
     def retry_agent_for_scratchpad(self, session_id: str, task_id: str, project_path: str) -> AgentResult:
         """Retry agent with focused prompt to create missing scratchpad"""

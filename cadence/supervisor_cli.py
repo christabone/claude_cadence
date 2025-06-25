@@ -125,7 +125,7 @@ def main():
 
     # Apply overrides
     if args.max_turns:
-        config.execution.max_turns = args.max_turns
+        config.execution.max_supervisor_turns = args.max_turns
     if args.model:
         config.supervisor.model = args.model
 

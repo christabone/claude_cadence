@@ -80,7 +80,7 @@ class TaskSupervisor:
 
         # Use config values, with parameter overrides
         self.config = config
-        self.max_turns = max_turns or config.execution.max_turns
+        self.max_turns = max_turns or config.execution.max_supervisor_turns
         self.output_dir = Path(output_dir or config.execution.log_dir)
         self.output_dir.mkdir(exist_ok=True, parents=True)
         self.model = model or config.agent.model
