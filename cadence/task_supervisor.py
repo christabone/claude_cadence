@@ -17,7 +17,8 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime
 import uuid
-from .prompts import TodoPromptManager, YAMLPromptLoader
+from .prompts import TodoPromptManager
+from .prompt_loader import PromptLoader
 from .task_manager import TaskManager, Task
 from .config import ConfigLoader, CadenceConfig, SUPERVISOR_LOG_DIR, SCRATCHPAD_DIR
 from .zen_integration import ZenIntegration
@@ -95,8 +96,8 @@ class TaskSupervisor:
             verbose=self.verbose
         )
 
-        # Initialize YAML prompt loader for replacing PromptBuilder
-        self.prompt_loader = YAMLPromptLoader()
+        # Initialize prompt loader
+        self.prompt_loader = PromptLoader()
 
         # Initialize supervisor log directory
         self.supervisor_log_dir = Path(SUPERVISOR_LOG_DIR)

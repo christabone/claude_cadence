@@ -8,8 +8,9 @@ from pathlib import Path
 import yaml
 
 from cadence.prompts import (
-    ExecutionContext, YAMLPromptLoader, PromptGenerator, TodoPromptManager
+    ExecutionContext, PromptGenerator, TodoPromptManager
 )
+from cadence.prompt_loader import PromptLoader
 
 
 class TestExecutionContext:
@@ -46,12 +47,12 @@ class TestExecutionContext:
         assert context.continuation_context == "Previous execution"
 
 
-class TestYAMLPromptLoader:
+class TestPromptLoader:
     """Test YAML prompt loading"""
 
     def test_default_loader(self):
         """Test loading default prompts.yaml"""
-        loader = YAMLPromptLoader()
+        loader = PromptLoader()
         assert loader.config is not None
         assert "core_agent_context" in loader.config
         assert "agent_prompts" in loader.config
@@ -69,14 +70,14 @@ class TestYAMLPromptLoader:
         with open(custom_yaml, 'w') as f:
             yaml.dump(custom_content, f)
 
-        loader = YAMLPromptLoader(str(custom_yaml))
+        loader = PromptLoader(str(custom_yaml))
         assert loader.config["test_template"] == "Hello {name}"
         assert loader.config["nested"]["template"] == "Nested {value}"
 
     def test_missing_file(self):
         """Test error on missing file"""
         with pytest.raises(IOError, match="not found"):
-            YAMLPromptLoader("/nonexistent/file.yaml")
+            PromptLoader("/nonexistent/file.yaml")
 
     def test_invalid_yaml(self, temp_dir):
         """Test error on invalid YAML"""
@@ -84,11 +85,11 @@ class TestYAMLPromptLoader:
         bad_yaml.write_text("{ invalid yaml content :")
 
         with pytest.raises(ValueError, match="Error parsing YAML"):
-            YAMLPromptLoader(str(bad_yaml))
+            PromptLoader(str(bad_yaml))
 
     def test_format_template(self):
         """Test template formatting"""
-        loader = YAMLPromptLoader()
+        loader = PromptLoader()
 
         # Simple formatting
         result = loader.format_template("Hello {name}", {"name": "World"})
@@ -100,7 +101,7 @@ class TestYAMLPromptLoader:
 
     def test_format_template_nested(self):
         """Test nested template formatting"""
-        loader = YAMLPromptLoader()
+        loader = PromptLoader()
         loader.config["greeting"] = "Hello {name}"
         loader.config["message"] = "{greeting}, welcome!"
 
@@ -116,7 +117,7 @@ class TestYAMLPromptLoader:
 
     def test_format_template_circular_reference(self):
         """Test circular reference handling"""
-        loader = YAMLPromptLoader()
+        loader = PromptLoader()
         loader.config["a"] = "{b}"
         loader.config["b"] = "{a}"
 
@@ -128,7 +129,7 @@ class TestYAMLPromptLoader:
 
     def test_get_template(self):
         """Test getting templates by path"""
-        loader = YAMLPromptLoader()
+        loader = PromptLoader()
 
         # Direct path
         template = loader.get_template("core_agent_context.supervised_context")
@@ -139,7 +140,7 @@ class TestYAMLPromptLoader:
 
     def test_build_prompt_from_sections(self):
         """Test building prompts from sections"""
-        loader = YAMLPromptLoader()
+        loader = PromptLoader()
 
         sections = [
             "Header: {title}",
@@ -163,7 +164,7 @@ class TestPromptGenerator:
 
     def test_initialization(self):
         """Test PromptGenerator initialization"""
-        loader = YAMLPromptLoader()
+        loader = PromptLoader()
         generator = PromptGenerator(loader)
 
         assert generator.loader == loader

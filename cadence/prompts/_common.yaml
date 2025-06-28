@@ -1,0 +1,196 @@
+# _common.yaml - Shared YAML anchors for Claude Cadence prompt system
+# This file contains reusable content patterns identified during migration analysis
+#
+# IMPORTANT: This file MUST be loaded first before other prompt files
+# to ensure anchors are available for reference
+#
+# Naming Convention:
+# - &base_* : Base configuration and paths
+# - &var_*  : Variable templates and placeholders
+# - &tpl_*  : Reusable template structures
+
+# ============================================
+# BASE CONFIGURATION AND PATHS
+# ============================================
+
+# Common directory paths used throughout the system
+base_paths: &base_paths
+  cadence_dir: ".cadence"
+  scratchpad_dir: "{project_path}/.cadence/scratchpad"
+  agent_dir: "{project_path}/.cadence/agent"
+  supervisor_dir: "{project_path}/.cadence/supervisor"
+  logs_dir: "{project_path}/.cadence/logs"
+
+# Session file patterns
+base_files: &base_files
+  scratchpad: "{project_path}/.cadence/scratchpad/session_{session_id}.md"
+  agent_output: "{project_path}/.cadence/agent/output_{session_id}.log"
+  decision_snapshot: "{project_path}/.cadence/supervisor/decision_snapshot_{session_id}.json"
+  agent_log: "{project_path}/.cadence/logs/agent_{session_id}.log"
+
+# ============================================
+# VARIABLE TEMPLATES
+# ============================================
+
+# Core context variables used in all prompts
+var_project_context: &var_project_context
+  project_path: "{project_path}"
+  session_id: "{session_id}"
+  task_numbers: "{task_numbers}"
+  max_turns: "{max_turns}"
+
+# Status tracking variables
+var_status_tracking: &var_status_tracking
+  completed_count: "{completed_count}"
+  remaining_count: "{remaining_count}"
+  turns_used: "{turns_used}"
+
+# ============================================
+# TEMPLATE STRUCTURES
+# ============================================
+
+# Section header formatting
+tpl_section_header: &tpl_section_header
+  format: "=== {section_name} ==="
+
+# TODO item formatting
+tpl_todo_item: &tpl_todo_item
+  format: "{number}. {todo_text}"
+
+# Status message templates
+tpl_status_complete: &tpl_status_complete "Status: COMPLETE ✅"
+tpl_status_progress: &tpl_status_progress "Status: IN_PROGRESS"
+tpl_status_stuck: &tpl_status_stuck "Status: STUCK"
+
+# ============================================
+# SERENA MCP ACTIVATION (High-frequency reuse)
+# ============================================
+
+base_serena_activation: &base_serena_activation |
+  === SERENA MCP ACTIVATION (CRITICAL) ===
+  BEFORE any code analysis or file operations, you MUST activate Serena MCP:
+
+  STEP 1: Activate Serena project
+  - Run: mcp__serena__activate_project --project={project_path}
+  - If this fails, try: mcp__serena__activate_project --project=.
+  - If still fails, proceed without Serena but note this in your output
+
+  STEP 2: Get initial instructions (optional but recommended)
+  - Run: mcp__serena__initial_instructions
+  - This provides project-specific context and guidelines
+
+  WHY THIS MATTERS: Serena provides 10x faster semantic code analysis than basic file tools.
+
+# ============================================
+# SAFETY NOTICES
+# ============================================
+
+base_safety_notice: &base_safety_notice |
+  === IMPORTANT SAFETY NOTICE ===
+  You are running with --dangerously-skip-permissions (this is required for smooth operation).
+  This allows you to work efficiently without interruption.
+
+  With this power comes responsibility:
+  - Think before executing any destructive command
+  - Double-check paths before deletion operations
+  - Be especially careful with system-wide changes
+  - Your actions are immediate and cannot be easily undone
+
+# ============================================
+# SCRATCHPAD TEMPLATES
+# ============================================
+
+base_scratchpad_template: &base_scratchpad_template |
+  # Task Execution Scratchpad
+  Session ID: {session_id}
+  Task Master Tasks: {task_numbers}
+  Started: [timestamp]
+  Status: IN_PROGRESS
+
+  ## TODOs Overview
+  [List all TODOs here at start]
+
+  ## Progress Log
+  [Update after EACH TODO]
+
+  ## Issues/Blockers
+  [Note any problems immediately]
+
+  ## Help Requests
+  [Document if you need assistance]
+
+  ## Completion Summary
+  [Fill when all TODOs done]
+
+# ============================================
+# COMPLETION PROTOCOL
+# ============================================
+
+base_completion_protocol: &base_completion_protocol |
+  COMPLETION PROTOCOL:
+  - Finalize your scratchpad file with completion summary
+  - State 'ALL TASKS COMPLETE' clearly
+  - Exit immediately - do not continue or wait for confirmation
+  - Your supervisor will review your scratchpad and determine next steps
+
+# ============================================
+# CODE REVIEW TEMPLATES (High duplication)
+# ============================================
+
+# Task-level code review process
+tpl_code_review_task: &tpl_code_review_task |
+  CODE REVIEW INSTRUCTIONS:
+  When the agent completes all TODOs for a task:
+     - First, do YOUR OWN code review:
+       * Read the files that were modified
+       * Check if the implementation matches the task requirements
+       * Verify basic code quality and correctness
+     - If your review passes, update the task status to "done":
+       mcp__taskmaster-ai__set_task_status --id=<task_id> --status=done --projectRoot={project_path}
+     - Then run AI-powered code reviews using multiple models:
+       * First: mcp__zen__codereview with model="o3" for thorough analysis (use full o3, NOT o3-mini)
+       * Second: mcp__zen__codereview with model="gemini-2.5-pro" for expert validation
+       * CRITICAL: Present ONLY the facts without bias
+     - IMPORTANT: Wait for ALL THREE reviews to complete before proceeding
+
+# Project-level code review process
+tpl_code_review_project: &tpl_code_review_project |
+  PROJECT CODE REVIEW INSTRUCTIONS:
+  When all project tasks are complete (BEFORE returning action: "complete"):
+  1. First do YOUR OWN comprehensive project review
+  2. Then run final AI-powered code reviews:
+     * First: mcp__zen__codereview with model="o3" for thorough project analysis
+     * Second: mcp__zen__codereview with model="gemini-2.5-pro" for expert validation
+     * Present ONLY facts without bias
+  3. Wait for ALL THREE reviews to complete
+  4. Focus on SHOWSTOPPER issues only
+  5. If NO SHOWSTOPPER issues: return action: "complete"
+
+# ============================================
+# HELP REQUEST TEMPLATES
+# ============================================
+
+tpl_help_request: &tpl_help_request |
+  ## HELP NEEDED
+  Status: STUCK
+  Issue: [Clear description of the problem]
+  Attempted: [What you've tried so far]
+  Context: [Relevant files/errors]
+  Recommendation: [What kind of help would be most useful]
+
+# ============================================
+# TEST ANCHORS FOR POC VALIDATION
+# ============================================
+
+# Simple anchor test
+test_simple: &test_simple "This is a simple test anchor"
+
+# Nested anchor test
+test_nested: &test_nested
+  base_path: *base_paths
+  message: "Testing nested anchor reference"
+
+# Merge key test
+test_merge: &test_merge
+  <<: *var_project_context
+  additional_var: "test_value"

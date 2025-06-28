@@ -9,9 +9,6 @@ from typing import List, Dict, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-import yaml
-import re
-import os
 from jinja2 import Template
 
 # Output processing constants
@@ -32,117 +29,22 @@ class ExecutionContext:
     project_path: Optional[str] = None  # For Serena activation and general use
 
 
-class YAMLPromptLoader:
-    """Loads and manages prompts from YAML configuration"""
-
-    def __init__(self, config_path: Optional[str] = None):
-        """Initialize with YAML config file"""
-        if config_path is None:
-            # Default to prompts.yaml in same directory
-            config_path = Path(__file__).parent / "prompts.yaml"
-        else:
-            config_path = Path(config_path)
-
-        try:
-            with open(config_path, 'r') as f:
-                self.config = yaml.safe_load(f)
-        except FileNotFoundError:
-            raise IOError(f"Prompt configuration file not found at: {config_path}")
-        except yaml.YAMLError as e:
-            raise ValueError(f"Error parsing YAML file {config_path}: {e}")
-
-    def format_template(self, template: str, context: Dict[str, Any], visited: Optional[set] = None) -> str:
-        """Format a template string with context variables"""
-        if visited is None:
-            visited = set()
-
-        # First, check if template contains Jinja2 control structures (not just variables)
-        if '{%' in template:
-            # Process with Jinja2
-            jinja_template = Template(template)
-            template = jinja_template.render(**context)
-
-        # Handle nested references like {shared_agent_context.supervision_explanation}
-        def replace_ref(match):
-            ref = match.group(1)
-
-            # Check for cycles
-            if ref in visited:
-                return f"{{CYCLE_DETECTED: {ref}}}"
-
-            parts = ref.split('.')
-
-            value = self.config
-            for part in parts:
-                if isinstance(value, dict) and part in value:
-                    value = value[part]
-                else:
-                    # Not a config reference, check context
-                    return match.group(0) if ref not in context else str(context[ref])
-
-            # If we found a config value, format it recursively
-            if isinstance(value, str):
-                visited.add(ref)
-                result = self.format_template(value, context, visited)
-                visited.remove(ref)
-                return result
-            return str(value)
-
-        # Second pass: replace config references
-        result = re.sub(r'\{([^}]+)\}', replace_ref, template)
-
-        # Third pass: simple format with context
-        try:
-            result = result.format(**context)
-        except KeyError:
-            # Some keys might be missing, that's OK for optional sections
-            pass
-
-        return result
-
-    def get_template(self, path: str) -> str:
-        """Get a template by dot-separated path"""
-        parts = path.split('.')
-        value = self.config
-
-        for part in parts:
-            if isinstance(value, dict) and part in value:
-                value = value[part]
-            else:
-                return ""
-
-        # Return the raw template string without formatting
-        # This allows Jinja2 templates to be processed later with proper context
-        if isinstance(value, str):
-            return value
-        return ""
-
-    def build_prompt_from_sections(self, sections: List[str], context: Dict[str, Any]) -> str:
-        """Build a prompt from a list of sections"""
-        formatted_sections = []
-
-        for section in sections:
-            # Skip empty sections or those with missing required context
-            if section.strip():
-                try:
-                    formatted = self.format_template(section, context)
-                    if formatted.strip() and '{' not in formatted:  # No unresolved vars
-                        formatted_sections.append(formatted)
-                except KeyError:
-                    continue
-
-        return "\n".join(formatted_sections)
 
 
 class PromptGenerator:
     """Generates context-aware prompts for agents and supervisors"""
 
     def __init__(self, loader_or_config_path=None):
-        """Initialize with YAMLPromptLoader or config path"""
-        if isinstance(loader_or_config_path, YAMLPromptLoader):
+        """Initialize with a PromptLoader instance or config path"""
+        # Import here to avoid circular imports
+        from .prompt_loader import PromptLoader
+
+        if isinstance(loader_or_config_path, PromptLoader):
+            # It's already a PromptLoader instance
             self.loader = loader_or_config_path
         else:
-            self.loader = YAMLPromptLoader(loader_or_config_path)
+            # It's a config path, create a new PromptLoader
+            self.loader = PromptLoader(loader_or_config_path)
 
     def get_initial_prompt(self, *args, **kwargs):
         """Alias for generate_initial_todo_prompt"""

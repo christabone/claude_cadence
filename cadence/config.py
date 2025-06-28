@@ -4,9 +4,10 @@ Configuration management for Claude Cadence
 
 import os
 import yaml
+import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Any, Literal, get_args
+from dataclasses import dataclass, field, asdict, is_dataclass
 
 # Constants for system-wide strings (defaults, can be overridden by config)
 COMPLETION_PHRASE = "ALL TASKS COMPLETE"
@@ -134,6 +135,57 @@ class TaskDetectionConfig:
     stuck_status_phrase: str = STUCK_STATUS_PHRASE
 
 
+@dataclass
+class CircularDependencyConfig:
+    """Configuration for circular dependency detection"""
+    max_file_modifications: int = 3
+    min_attempts_before_check: int = 5
+
+    def __post_init__(self):
+        """Validate configuration values"""
+        if self.max_file_modifications < 1:
+            raise ValueError("max_file_modifications must be positive")
+        if self.min_attempts_before_check < 1:
+            raise ValueError("min_attempts_before_check must be positive")
+
+
+@dataclass
+class FixAgentDispatcherConfig:
+    """Configuration for the Fix Agent Dispatcher"""
+    max_attempts: int = 3
+    timeout_ms: int = 300000
+    enable_auto_fix: bool = True
+    severity_threshold: Literal["low", "medium", "high", "critical"] = "high"
+    enable_verification: bool = True
+    verification_timeout_ms: int = 60000
+    circular_dependency: CircularDependencyConfig = field(default_factory=CircularDependencyConfig)
+    validation: Dict[str, int] = field(default_factory=lambda: {
+        "min_timeout_ms": 100,
+        "max_timeout_ms": 3600000
+    })
+
+    def __post_init__(self):
+        """Validate configuration values"""
+        # Validate severity_threshold at runtime
+        valid_severities = get_args(self.__annotations__['severity_threshold'])
+        if self.severity_threshold not in valid_severities:
+            raise ValueError(f"severity_threshold must be one of {valid_severities}, but got '{self.severity_threshold}'")
+
+        # Validate max_attempts with upper bound to prevent DoS
+        if not 1 <= self.max_attempts <= 100:
+            raise ValueError("max_attempts must be between 1 and 100")
+
+        min_timeout = self.validation.get("min_timeout_ms", 100)
+        max_timeout = self.validation.get("max_timeout_ms", 3600000)
+
+        if self.timeout_ms < min_timeout:
+            raise ValueError(f"timeout_ms must be at least {min_timeout}ms")
+        if self.timeout_ms > max_timeout:
+            raise ValueError(f"timeout_ms must not exceed {max_timeout}ms")
+        if self.verification_timeout_ms < min_timeout:
+            raise ValueError(f"verification_timeout_ms must be at least {min_timeout}ms")
+        if self.verification_timeout_ms > max_timeout:
+            raise ValueError(f"verification_timeout_ms must not exceed {max_timeout}ms")
 
 
 @dataclass
@@ -188,6 +240,7 @@ class CadenceConfig:
         "pretty_json": True
     })
     orchestration: OrchestrationConfig = field(default_factory=OrchestrationConfig)
+    fix_agent_dispatcher: FixAgentDispatcherConfig = field(default_factory=FixAgentDispatcherConfig)
 
 
 class ConfigLoader:
@@ -234,6 +287,16 @@ class ConfigLoader:
 
         return None
 
+    def _deep_merge_dict(self, base: dict, override: dict) -> dict:
+        """Deep merge override dictionary into base dictionary"""
+        result = base.copy()
+        for key, value in override.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self._deep_merge_dict(result[key], value)
+            else:
+                result[key] = value
+        return result
+
     def _load_config(self) -> CadenceConfig:
         """Load configuration from file or use defaults"""
         if not self.config_path:
@@ -262,16 +325,45 @@ class ConfigLoader:
             if 'task_detection' in data:
                 config.task_detection = TaskDetectionConfig(**data['task_detection'])
 
+            # Orchestration config
+            if 'orchestration' in data:
+                config.orchestration = OrchestrationConfig(**data['orchestration'])
+
+            # Fix Agent Dispatcher config
+            if 'fix_agent_dispatcher' in data:
+                try:
+                    fad_data = data['fix_agent_dispatcher'].copy()
+                    if 'circular_dependency' in fad_data:
+                        # Handle nested dataclass
+                        try:
+                            fad_data['circular_dependency'] = CircularDependencyConfig(**fad_data['circular_dependency'])
+                        except (TypeError, ValueError) as e:
+                            logger = logging.getLogger(__name__)
+                            logger.warning(f"Invalid circular_dependency config: {e}. Using defaults.")
+                            fad_data['circular_dependency'] = CircularDependencyConfig()
+                    config.fix_agent_dispatcher = FixAgentDispatcherConfig(**fad_data)
+                except (TypeError, ValueError) as e:
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Invalid fix_agent_dispatcher config: {e}. Using defaults.")
+                    config.fix_agent_dispatcher = FixAgentDispatcherConfig()
+
             # Direct dictionary configs
             for key in ['session', 'integrations', 'prompts', 'zen_integration', 'processing', 'development']:
                 if key in data:
-                    setattr(config, key, data[key])
+                    # For dictionaries, deep merge with defaults instead of replacing
+                    default_value = getattr(config, key)
+                    if isinstance(default_value, dict):
+                        merged = self._deep_merge_dict(default_value, data[key])
+                        setattr(config, key, merged)
+                    else:
+                        setattr(config, key, data[key])
 
             return config
 
         except Exception as e:
-            print(f"Warning: Failed to load config from {self.config_path}: {e}")
-            print("Using default configuration")
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to load config from {self.config_path}: {e}")
+            logger.warning("Using default configuration")
             return CadenceConfig()
 
     def get_tool_command_flags(self) -> List[str]:
@@ -288,6 +380,12 @@ class ConfigLoader:
         return flags
 
 
+    def _dataclass_to_dict(self, obj) -> dict:
+        """Convert a dataclass to dictionary using Python's built-in asdict()"""
+        if is_dataclass(obj):
+            return asdict(obj)
+        return obj
+
     def save(self, path: Optional[str] = None):
         """Save current configuration to file"""
         save_path = Path(path) if path else self.config_path
@@ -296,13 +394,17 @@ class ConfigLoader:
 
         # Convert to dictionary
         data = {
-            "execution": self.config.execution.__dict__,
-            "agent": self.config.agent.__dict__,
-            "supervisor": self.config.supervisor.__dict__,
-            "task_detection": self.config.task_detection.__dict__,
+            "execution": self._dataclass_to_dict(self.config.execution),
+            "agent": self._dataclass_to_dict(self.config.agent),
+            "supervisor": self._dataclass_to_dict(self.config.supervisor),
+            "task_detection": self._dataclass_to_dict(self.config.task_detection),
+            "orchestration": self._dataclass_to_dict(self.config.orchestration),
+            "fix_agent_dispatcher": self._dataclass_to_dict(self.config.fix_agent_dispatcher),
             "session": self.config.session,
             "integrations": self.config.integrations,
             "prompts": self.config.prompts,
+            "zen_integration": self.config.zen_integration,
+            "processing": self.config.processing,
             "development": self.config.development
         }
 

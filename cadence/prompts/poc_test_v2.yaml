@@ -1,0 +1,28 @@
+# POC Test File V2 - Tests anchor references to a separately loaded _common.yaml
+# This approach loads _common.yaml separately and tests if anchors persist
+
+# We'll test this differently - by having test content that references
+# anchors that should be defined when _common.yaml is loaded first
+
+# Test 1: Reference to simple anchor from _common.yaml
+test_simple_ref: "*test_simple"
+
+# Test 2: Reference to base paths anchor
+paths_ref: "*base_paths"
+
+# Test 3: Using merge keys with common anchors
+context_with_merge:
+  extra_field: "my custom value"
+  # Will test if we can merge with <<: *var_project_context
+
+# Test 4: Reference to template anchors
+templates:
+  serena: "*base_serena_activation"
+  safety: "*base_safety_notice"
+  scratchpad: "*base_scratchpad_template"
+
+# Test 5: Multiple references
+all_status:
+  complete: "*tpl_status_complete"
+  progress: "*tpl_status_progress"
+  stuck: "*tpl_status_stuck"

@@ -76,6 +76,45 @@ project/
 └── CLAUDE.md            # This file - auto-loaded by Claude Code
 ```
 
+## Prompt System Architecture
+
+Claude Cadence uses a modular prompt system powered by **PromptLoader** for managing AI agent and supervisor prompts.
+
+### Core Components
+
+- **PromptLoader** (`cadence/prompt_loader.py`) - The sole prompt loading mechanism
+  - Supports YAML !include tags for modular prompt organization
+  - Handles Jinja2 template processing with context variables
+  - Provides security controls to prevent path traversal attacks
+  - Replaces the deprecated YAMLPromptLoader completely
+
+- **Prompt Configuration** (`cadence/prompts.yaml`) - Main configuration file
+  - Modular structure using !include references to markdown files
+  - Template variables for dynamic content injection
+  - Organized sections for different agent contexts and workflows
+
+- **Prompt Files** (`cadence/prompts/core/`) - Modular markdown content
+  - Organized by category (instructions, templates, safety, etc.)
+  - Uses Jinja2 syntax for dynamic templating
+  - Reusable across different execution contexts
+
+### Usage
+
+```python
+from cadence.prompt_loader import PromptLoader
+
+# Load prompts with !include support
+loader = PromptLoader()
+
+# Format templates with context
+prompt = loader.format_template(template, context_vars)
+
+# Access specific sections
+section = loader.get_template("safety_notice_section")
+```
+
+**Note**: PromptLoader is the only supported prompt loading mechanism. All legacy references to YAMLPromptLoader have been removed.
+
 ## MCP Integration
 
 Task Master provides an MCP server that Claude Code can connect to. Configure in `.mcp.json`:

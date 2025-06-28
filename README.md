@@ -90,6 +90,44 @@ Claude Cadence uses a sophisticated YAML-based prompt system with Jinja2 templat
 - **Safety-First Design**: Built-in warnings and permission handling
 - **Conditional Logic**: Different prompt flows based on task status, errors, and retry attempts
 
+#### PromptLoader System
+
+The `PromptLoader` class provides the core YAML loading functionality with advanced features:
+
+```python
+from cadence.prompt_loader import PromptLoader
+
+# Initialize with default config
+loader = PromptLoader()
+
+# Or with custom config path
+loader = PromptLoader("path/to/prompts.yaml")
+
+# Load templates with include support
+content = loader.config['agent_prompts']['initial']
+
+# Format templates with context variables
+prompt = loader.format_template(template, context_vars)
+```
+
+**Key Features:**
+- **Include Support**: Use `!include filename.md` to modularize prompt content
+- **Security**: Path traversal protection prevents access outside base directory
+- **Error Handling**: Graceful handling of missing files, malformed YAML, circular dependencies
+- **Template Processing**: Jinja2 integration for dynamic content generation
+- **Performance**: Efficient loading with validation and error reporting
+
+**File Organization:**
+```
+cadence/prompts/
+├── core/                  # Core prompt components
+│   ├── instructions/      # Task instructions
+│   ├── templates/         # Reusable templates
+│   ├── safety/           # Safety notices
+│   └── context/          # Context sections
+└── prompts.yaml          # Main configuration with !include references
+```
+
 ### Zen Integration
 
 Claude Cadence integrates with zen MCP tools to provide assistance when agents encounter difficulties:
@@ -120,6 +158,36 @@ The supervisor automatically calls zen when:
 ## Configuration
 
 Configuration is managed through `config.yaml`. See the file for all available options including execution settings, model configuration, MCP integrations, and prompt customization.
+
+### Troubleshooting PromptLoader Issues
+
+**Common Issues:**
+
+1. **FileNotFoundError: Include file not found**
+   - Check that included files exist relative to the YAML file location
+   - Verify file permissions and paths
+
+2. **YAMLError: Circular dependency detected**
+   - Review your !include chains for loops (file A includes B, B includes A)
+   - Use `load_yaml_with_includes()` directly to debug inclusion paths
+
+3. **YAMLError: Path outside base directory**
+   - Security feature prevents `../` path traversal attacks
+   - Use relative paths within the project directory only
+
+4. **Template formatting errors**
+   - Missing variables are preserved as `{variable_name}` (graceful degradation)
+   - Check template syntax and available context variables
+
+**Debug Mode:**
+```python
+# Enable detailed error reporting
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+from cadence.prompt_loader import load_yaml_with_includes
+content = load_yaml_with_includes("prompts.yaml")
+```
 
 ## Documentation
 

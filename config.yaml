@@ -107,6 +107,38 @@ task_detection:
   help_needed_phrase: "HELP NEEDED"
   stuck_status_phrase: "Status: STUCK"
 
+# Review Trigger Detection settings
+triggers:
+  # Custom trigger patterns (will be merged with built-in patterns)
+  patterns:
+    # Example custom pattern - high priority all caps completion
+    - name: "caps_task_complete"
+      type: "task_complete"
+      pattern: "TASK COMPLETED|IMPLEMENTATION COMPLETE"
+      confidence: 0.9
+      priority: 12
+      enabled: true
+      description: "All caps completion markers"
+
+    # Example custom help pattern
+    - name: "need_assistance"
+      type: "help_needed"
+      pattern: "NEED ASSISTANCE|REQUIRE HELP"
+      confidence: 0.85
+      priority: 8
+      enabled: true
+      description: "Alternative help request patterns"
+
+    # Example custom error pattern for specific error types
+    - name: "permission_error"
+      type: "error_pattern"
+      pattern: "PermissionError|Permission denied"
+      confidence: 0.8
+      priority: 30
+      enabled: true
+      extractors: ["extract_error_details"]
+      description: "Permission-related errors"
+
 
 # Session management
 session:
@@ -173,6 +205,17 @@ zen_integration:
   # Code review frequency - when to run zen code review
   # Options: "none" (disabled), "task" (after each task), "project" (at end of project)
   code_review_frequency: "task"
+  # Models for code review (no fallbacks)
+  primary_review_model: "gemini-2.5-pro"
+  secondary_review_model: "o3"
+  # Model for debugging
+  debug_model: "o3"
+  # Model for analysis
+  analyze_model: "o3"
+  # Models for consensus (multiple perspectives)
+  consensus_models:
+    - "o3"
+    - "gemini-2.5-pro"
 
 # Processing settings
 processing:
@@ -193,6 +236,34 @@ development:
   save_raw_output: false
   # Pretty print JSON in logs
   pretty_json: true
+
+# Fix Agent Dispatcher settings
+fix_agent_dispatcher:
+  # Maximum attempts to fix an issue before giving up
+  max_attempts: 3
+  # Timeout for each fix attempt (milliseconds)
+  timeout_ms: 300000  # 5 minutes
+  # Enable automatic fix dispatch
+  enable_auto_fix: true
+  # Minimum severity to trigger auto-fix ("low", "medium", "high", "critical")
+  severity_threshold: "high"
+  # Enable verification of fixes
+  enable_verification: true
+  # Timeout for verification (milliseconds)
+  verification_timeout_ms: 60000  # 1 minute
+  # Validation constants for timeout values
+  validation:
+    # Minimum timeout value in milliseconds (100ms for testing flexibility)
+    min_timeout_ms: 100
+    # Maximum timeout value in milliseconds (1 hour safety limit)
+    max_timeout_ms: 3600000
+  # Circular dependency detection
+  circular_dependency:
+    # Maximum number of times a file can be modified in failed attempts
+    # before suspecting a circular dependency
+    max_file_modifications: 3
+    # Minimum number of attempts before checking for circular dependencies
+    min_attempts_before_check: 5
 
 # Orchestration settings
 orchestration:

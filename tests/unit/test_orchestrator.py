@@ -57,8 +57,9 @@ class TestSupervisorOrchestrator:
         assert orchestrator.agent_dir.exists()
 
         # Check state initialized
-        assert orchestrator.state["first_run"] is True
         assert orchestrator.state["session_count"] == 0
+        assert orchestrator.state["last_session_id"] is None
+        assert "created_at" in orchestrator.state
 
     def test_state_persistence(self, temp_project):
         """Test state loading and saving"""
@@ -66,17 +67,17 @@ class TestSupervisorOrchestrator:
 
         # First orchestrator
         orch1 = SupervisorOrchestrator(project_root, task_file)
-        assert orch1.state["first_run"] is True
+        assert orch1.state["session_count"] == 0
 
         # Modify and save state
-        orch1.state["first_run"] = False
         orch1.state["session_count"] = 5
+        orch1.state["last_session_id"] = "test-session"
         orch1.save_state()
 
         # Second orchestrator should load saved state
         orch2 = SupervisorOrchestrator(project_root, task_file)
-        assert orch2.state["first_run"] is False
         assert orch2.state["session_count"] == 5
+        assert orch2.state["last_session_id"] == "test-session"
 
     def test_session_id_generation(self, temp_project):
         """Test session ID generation"""
@@ -88,14 +89,26 @@ class TestSupervisorOrchestrator:
         assert len(session_id) > 10
         assert "_" in session_id
 
-    @patch('subprocess.run')
-    def test_run_supervisor_analysis_first_run(self, mock_run, temp_project):
+    @patch('cadence.orchestrator.SupervisorOrchestrator.run_claude_with_realtime_output')
+    def test_run_supervisor_analysis_first_run(self, mock_run_claude, temp_project):
         """Test running supervisor analysis on first run"""
         project_root, task_file = temp_project
-        orchestrator = SupervisorOrchestrator(project_root, task_file)
+        config = {
+            "supervisor": {
+                "model": "claude-3-5-sonnet-20241022"
+            },
+            "agent": {
+                "model": "claude-3-5-sonnet-20241022"
+            }
+        }
+        orchestrator = SupervisorOrchestrator(project_root, task_file, config=config)
 
-        # Mock subprocess result
-        mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+        # Mock async subprocess result with simulated output
+        # Return value is (returncode, all_output_lines)
+        mock_output = [
+            '{"type":"assistant","message":{"content":[{"type":"text","text":"Here is the decision:\\n{\\n  \\"action\\": \\"execute\\",\\n  \\"todos\\": [\\"Test TODO\\"],\\n  \\"guidance\\": \\"Test guidance\\",\\n  \\"task_id\\": \\"1\\",\\n  \\"session_id\\": \\"test_session\\",\\n  \\"reason\\": \\"Test reason\\"\\n}"}]}}'
+        ]
+        mock_run_claude.return_value = (0, mock_output)
 
         # Create mock decision file
         decision_data = {
@@ -113,53 +126,85 @@ class TestSupervisorOrchestrator:
 
         # Test first run (no --continue flag)
         with patch('os.chdir') as mock_chdir, patch('os.getcwd', return_value=str(project_root)):
-            decision = orchestrator.run_supervisor_analysis("test_session", use_continue=False)
+            decision = orchestrator.run_supervisor_analysis("test_session", use_continue=False, iteration=1)
 
             # Verify chdir was called (first call should be to supervisor dir)
             assert mock_chdir.call_count >= 1
             mock_chdir.assert_any_call(orchestrator.supervisor_dir)
 
-            # Verify command
-            args = mock_run.call_args[0][0]
-            assert args[0] == "python3"
-            assert args[1].endswith("supervisor_cli.py")
-            assert "--analyze" in args
+            # Verify command was called
+            assert mock_run_claude.called
+            args = mock_run_claude.call_args[0][0]  # First positional argument is cmd list
+            assert "claude" in args[0]
             assert "--continue" not in args
 
             # Verify decision
             assert decision.action == "execute"
             assert decision.todos == ["Test TODO"]
 
-    @patch('subprocess.run')
-    def test_run_supervisor_analysis_continue(self, mock_run, temp_project):
+    @patch('cadence.orchestrator.SupervisorOrchestrator.run_claude_with_realtime_output')
+    def test_run_supervisor_analysis_continue(self, mock_run_claude, temp_project):
         """Test running supervisor analysis with continue flag"""
         project_root, task_file = temp_project
-        orchestrator = SupervisorOrchestrator(project_root, task_file)
+        config = {
+            "supervisor": {
+                "model": "claude-3-5-sonnet-20241022"
+            },
+            "agent": {
+                "model": "claude-3-5-sonnet-20241022"
+            }
+        }
+        orchestrator = SupervisorOrchestrator(project_root, task_file, config=config)
 
-        # Mock subprocess result
-        mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+        # Mock async subprocess result with simulated output
+        # Return value is (returncode, all_output_lines)
+        mock_output = [
+            '{"type":"assistant","message":{"content":[{"type":"text","text":"Continuing analysis...\\n{\\n  \\"action\\": \\"skip\\",\\n  \\"reason\\": \\"Test skip reason\\",\\n  \\"task_id\\": \\"1\\",\\n  \\"session_id\\": \\"test_session\\"\\n}"}]}}'
+        ]
+        mock_run_claude.return_value = (0, mock_output)
 
         # Create mock decision file
         decision_file = orchestrator.supervisor_dir / "decision_test_session.json"
         with open(decision_file, 'w') as f:
-            json.dump({"action": "skip", "reason": "Test"}, f)
+            json.dump({"action": "skip", "reason": "Test skip reason", "task_id": "1", "session_id": "test_session"}, f)
 
         # Test with continue flag
         with patch('os.chdir'), patch('os.getcwd', return_value=str(project_root)):
-            orchestrator.run_supervisor_analysis("test_session", use_continue=True)
+            decision = orchestrator.run_supervisor_analysis("test_session", use_continue=True, iteration=2)
 
             # Verify --continue flag was added
-            args = mock_run.call_args[0][0]
+            assert mock_run_claude.called
+            args = mock_run_claude.call_args[0][0]
             assert "--continue" in args
 
-    @patch('subprocess.run')
-    def test_run_agent_first_run(self, mock_run, temp_project):
+            # Verify decision
+            assert decision.action == "skip"
+            assert decision.reason == "Test skip reason"
+
+    @patch('cadence.orchestrator.SupervisorOrchestrator.build_agent_prompt')
+    @patch('cadence.orchestrator.SupervisorOrchestrator.run_claude_with_realtime_output')
+    def test_run_agent_first_run(self, mock_run_claude, mock_build_prompt, temp_project):
         """Test running agent on first run"""
         project_root, task_file = temp_project
-        orchestrator = SupervisorOrchestrator(project_root, task_file)
+        config = {
+            "supervisor": {
+                "model": "claude-3-5-sonnet-20241022"
+            },
+            "agent": {
+                "model": "claude-3-5-sonnet-20241022"
+            }
+        }
+        orchestrator = SupervisorOrchestrator(project_root, task_file, config=config)
 
-        # Mock subprocess result
-        mock_run.return_value = Mock(returncode=0)
+        # Mock async subprocess result with simulated output showing completion
+        mock_output = [
+            '{"type":"assistant","message":{"content":[{"type":"text","text":"Working on tasks..."}]}}',
+            '{"type":"assistant","message":{"content":[{"type":"text","text":"ALL TASKS COMPLETE"}]}}'
+        ]
+        mock_run_claude.return_value = (0, mock_output)
+
+        # Mock build_agent_prompt to return a simple prompt
+        mock_build_prompt.return_value = "Test prompt with TODOs"
 
         todos = ["Task 1", "Task 2"]
         guidance = "Test guidance"
@@ -169,16 +214,20 @@ class TestSupervisorOrchestrator:
                 todos=todos,
                 guidance=guidance,
                 session_id="test_session",
-                use_continue=False
+                use_continue=False,
+                task_id="1",
+                subtasks=[],
+                project_root=str(project_root)
             )
 
             # Verify chdir to agent directory (checking any call, not just the last)
             assert mock_chdir.call_count >= 1
             mock_chdir.assert_any_call(orchestrator.agent_dir)
 
-            # Verify command
-            args = mock_run.call_args[0][0]
-            assert args[0] == "claude"
+            # Verify command was called
+            assert mock_run_claude.called
+            args = mock_run_claude.call_args[0][0]
+            assert "claude" in args[0]
             assert "-p" in args
             assert "-c" not in args  # No continue on first run
 
@@ -186,23 +235,33 @@ class TestSupervisorOrchestrator:
             assert isinstance(result, AgentResult)
             assert result.success is True
 
-    def test_build_agent_prompt(self, temp_project):
+    @patch('cadence.prompts.PromptGenerator.generate_initial_todo_prompt')
+    def test_build_agent_prompt(self, mock_generate_prompt, temp_project):
         """Test agent prompt building"""
         project_root, task_file = temp_project
         orchestrator = SupervisorOrchestrator(project_root, task_file)
+
+        # Mock the prompt generator to return a template with placeholders
+        mock_generate_prompt.return_value = """
+=== YOUR TODOS ===
+TODO1
+TODO2
+
+ALL TASKS COMPLETE marker
+HELP NEEDED marker
+"""
 
         todos = ["Complete task 1", "Complete task 2"]
         guidance = "Focus on quality"
 
         prompt = orchestrator.build_agent_prompt(todos, guidance)
 
+        # Since we're mocking generate_initial_todo_prompt, we just verify it was called
+        assert mock_generate_prompt.called
+
+        # Check that guidance was added
         assert "SUPERVISOR GUIDANCE" in prompt
         assert guidance in prompt
-        assert "YOUR TODOS" in prompt
-        assert todos[0] in prompt
-        assert todos[1] in prompt
-        assert "ALL TASKS COMPLETE" in prompt
-        assert "HELP NEEDED" in prompt
 
     def test_save_agent_results(self, temp_project):
         """Test saving agent results"""

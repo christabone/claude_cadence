@@ -90,6 +90,8 @@ test_output/
 test_logs/
 *.test.log
 test_session_*/
+cadence/prompts/poc_test*.yaml
+cadence/prompts/test_*.yaml
 
 # Temporary files
 *.tmp
@@ -99,6 +101,10 @@ test_session_*/
 *~
 .*.swp
 .*.swo
+
+# Serena cache files (keep directory structure but exclude pkl files)
+.serena/cache/**/*.pkl
+agr_mcp/.serena/cache/**/*.pkl
 
 # Task Master
 .taskmaster/
@@ -116,7 +122,7 @@ local_notes.md
 TODO.local.md
 
 # Cloned repositories
-# agr_mcp/  # Removed to allow tracking AGR MCP project
+agr_mcp/  # This is a separate repository, should not be committed with claude_cadence
 
 # Local scripts and PRD
 scripts/
