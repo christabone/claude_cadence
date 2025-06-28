@@ -84,7 +84,20 @@ supervisor:
     check_task_completion: true
     check_progress_indicators: true
     check_blockers: true
-
+  # Maximum turns for supervisor - moved from SupervisorDefaults
+  max_turns: 40
+  # Analysis timeout (seconds) - moved from SupervisorDefaults
+  analysis_timeout: 600
+  # Maximum consecutive errors before intervention - moved from SupervisorDefaults
+  max_consecutive_errors: 3
+  # Maximum output lines kept in memory - moved from SupervisorDefaults
+  max_output_lines: 10000
+  # Streaming output settings - moved from SupervisorDefaults
+  stream_buffer_size: 1048576  # 1MB
+  output_update_interval: 0.1  # seconds
+  # File size limits - moved from SupervisorDefaults
+  max_log_size: 52428800  # 50MB
+  max_prompt_size: 102400  # 100KB
 # Task completion detection
 task_detection:
   # Methods to use for detecting task completion (in priority order)
@@ -190,7 +203,22 @@ prompts:
   custom_prompts_file: ""
   # Whether to include timestamp in prompts
   include_timestamp: true
+  # Safety limit message - moved from AgentPromptDefaults
+  safety_limit_message: "You have up to {max_turns} turns as a safety limit (not a target)"
+  # Prompt section headers - moved from AgentPromptDefaults
+  supervisor_guidance_header: "=== SUPERVISOR GUIDANCE ==="
+  task_guidelines_header: "=== TASK EXECUTION GUIDELINES ==="
+  todo_list_header: "=== YOUR TODOS ==="
 
+# File patterns
+file_patterns:
+  # File naming patterns - moved from FilePatterns class
+  decision_file: "decision_{session_id}.json"
+  agent_result_file: "agent_result_{session_id}.json"
+  prompt_file: "prompt_{session_id}.txt"
+  output_file: "output_{session_id}.log"
+  error_file: "error_{session_id}.log"
+  supervisor_log_file: "supervisor_{timestamp}.log"
 # Zen integration settings
 zen_integration:
   # Number of output lines to include in zen context
@@ -216,18 +244,28 @@ zen_integration:
   consensus_models:
     - "o3"
     - "gemini-2.5-pro"
-
+  # Max retries for Zen operations - moved from ZenIntegrationDefaults
+  max_retries: 3
+  # Retry delay (seconds) - moved from ZenIntegrationDefaults
+  retry_delay: 1.0
+  # Request timeout (seconds) - moved from ZenIntegrationDefaults
+  request_timeout: 300
+  # Default thinking mode - moved from ZenIntegrationDefaults
+  default_thinking_mode: "high"
+  # Default temperature - moved from ZenIntegrationDefaults
+  default_temperature: 0.7
+  # Help needed threshold - moved from ZenIntegrationDefaults
+  help_needed_threshold: 3
 # Processing settings
 processing:
   # Thread join timeout (seconds)
   thread_join_timeout: 5
-  # Status check interval (seconds)
+  # Status check interval (seconds) - moved from SupervisorDefaults
   status_check_interval: 30
   # Maximum output truncate length for supervisor analysis
   max_output_truncate_length: 3000
   # Seconds per turn estimate (rough approximation)
   seconds_per_turn_estimate: 30
-
 # Development settings
 development:
   # Enable debug output
@@ -283,3 +321,7 @@ orchestration:
   mode: "orchestrated"
   # Quick quit detection - if agent/supervisor exits in under this many seconds, it's an error
   quick_quit_seconds: 10.0
+  # Session timeout (seconds) - moved from OrchestratorDefaults
+  session_timeout: 300
+  # Number of sessions to keep during cleanup - moved from OrchestratorDefaults
+  cleanup_keep_sessions: 5

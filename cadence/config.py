@@ -88,6 +88,26 @@ class ZenIntegrationConfig:
         "analyze": "medium"
     })
 
+    # New fields moved from ZenIntegrationDefaults
+    max_retries: int = 3
+    retry_delay: float = 1.0  # seconds
+    request_timeout: int = 300  # seconds
+    default_thinking_mode: str = "high"
+    default_temperature: float = 0.7
+    help_needed_threshold: int = 3
+
+    # Fields from config.yaml
+    output_lines_limit: int = 200
+    scratchpad_check_lines: int = 10
+    cutoff_indicator_threshold: int = 3
+    last_lines_to_check: int = 50
+    auto_debug_error_threshold: int = 3
+    primary_review_model: str = "gemini-2.5-pro"
+    secondary_review_model: str = "o3"
+    debug_model: str = "o3"
+    analyze_model: str = "o3"
+    consensus_models: List[str] = field(default_factory=lambda: ["o3", "gemini-2.5-pro"])
+
 
 @dataclass
 class SupervisorConfig:
@@ -106,6 +126,15 @@ class SupervisorConfig:
     })
     zen_integration: ZenIntegrationConfig = field(default_factory=ZenIntegrationConfig)
     use_continue: bool = False  # Whether to use --continue flag for supervisor sessions
+    # New fields moved from SupervisorDefaults
+    max_turns: int = 40
+    analysis_timeout: int = 600  # seconds
+    max_consecutive_errors: int = 3
+    max_output_lines: int = 10000
+    stream_buffer_size: int = 1048576  # 1MB
+    output_update_interval: float = 0.1  # seconds
+    max_log_size: int = 52428800  # 50MB
+    max_prompt_size: int = 102400  # 100KB  # Whether to use --continue flag for supervisor sessions
 
 
 @dataclass
@@ -118,6 +147,8 @@ class OrchestrationConfig:
     max_iterations: int = 100
     mode: str = "orchestrated"
     quick_quit_seconds: float = 10.0
+    session_timeout: int = 300  # seconds - moved from OrchestratorDefaults
+    cleanup_keep_sessions: int = 5  # moved from OrchestratorDefaults
 
 
 @dataclass
@@ -133,6 +164,37 @@ class TaskDetectionConfig:
     completion_phrase: str = COMPLETION_PHRASE
     help_needed_phrase: str = HELP_NEEDED_PHRASE
     stuck_status_phrase: str = STUCK_STATUS_PHRASE
+
+@dataclass
+class FilePatternConfig:
+    """File naming patterns configuration"""
+    decision_file: str = "decision_{session_id}.json"
+    agent_result_file: str = "agent_result_{session_id}.json"
+    prompt_file: str = "prompt_{session_id}.txt"
+    output_file: str = "output_{session_id}.log"
+    error_file: str = "error_{session_id}.log"
+    supervisor_log_file: str = "supervisor_{timestamp}.log"
+
+
+@dataclass
+class SessionConfig:
+    """Session management configuration"""
+    save_summaries: bool = True
+    summary_dir: str = ".cadence/sessions"
+    include_checkpoint_details: bool = True
+    id_format: str = SESSION_ID_FORMAT
+    file_prefix: str = "session_"
+
+
+@dataclass
+class PromptsConfig:
+    """Prompt customization configuration"""
+    custom_prompts_file: str = ""
+    include_timestamp: bool = True
+    safety_limit_message: str = "You have up to {max_turns} turns as a safety limit (not a target)"
+    supervisor_guidance_header: str = "=== SUPERVISOR GUIDANCE ==="
+    task_guidelines_header: str = "=== TASK EXECUTION GUIDELINES ==="
+    todo_list_header: str = "=== YOUR TODOS ==="
 
 
 @dataclass
@@ -199,13 +261,7 @@ class CadenceConfig:
     agent: AgentConfig = field(default_factory=AgentConfig)
     supervisor: SupervisorConfig = field(default_factory=SupervisorConfig)
     task_detection: TaskDetectionConfig = field(default_factory=TaskDetectionConfig)
-    session: Dict[str, Any] = field(default_factory=lambda: {
-        "save_summaries": True,
-        "summary_dir": ".cadence/sessions",
-        "include_checkpoint_details": True,
-        "id_format": SESSION_ID_FORMAT,
-        "file_prefix": SESSION_FILE_PREFIX
-    })
+    session: SessionConfig = field(default_factory=SessionConfig)
     integrations: Dict[str, Any] = field(default_factory=lambda: {
         "taskmaster": {
             "enabled": True,
@@ -217,10 +273,8 @@ class CadenceConfig:
             "servers": ["taskmaster-ai", "github", "filesystem"]
         }
     })
-    prompts: Dict[str, Any] = field(default_factory=lambda: {
-        "custom_prompts_file": "",
-        "include_timestamp": True
-    })
+    prompts: PromptsConfig = field(default_factory=PromptsConfig)
+    file_patterns: FilePatternConfig = field(default_factory=FilePatternConfig)
     zen_integration: Dict[str, Any] = field(default_factory=lambda: {
         "output_lines_limit": ZEN_OUTPUT_LINES_LIMIT,
         "scratchpad_check_lines": SCRATCHPAD_CHECK_LINES,

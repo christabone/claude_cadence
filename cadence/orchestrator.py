@@ -20,7 +20,7 @@ import logging
 import threading
 import asyncio
 
-from .constants import OrchestratorDefaults, FilePatterns, AgentPromptDefaults
+from .config import ConfigLoader
 from .utils import generate_session_id
 from .config import ZenIntegrationConfig
 from .prompts import PromptGenerator, ExecutionContext
@@ -87,6 +87,10 @@ class SupervisorOrchestrator:
 
     def __init__(self, project_root: Path, task_file: Optional[Path] = None, config: Optional[Dict] = None):
         self.project_root = Path(project_root).resolve()
+
+        # Load configuration
+        config_loader = ConfigLoader()
+        self.cadence_config = config_loader.config
 
         # Default to .taskmaster/tasks/tasks.json if not specified
         if task_file is None:
@@ -1223,7 +1227,7 @@ class SupervisorOrchestrator:
                     # Check if we have previous agent results (only after first iteration)
                     previous_agent_result = None
                     if iteration > 1:
-                        agent_results_file = self.supervisor_dir / FilePatterns.AGENT_RESULT_FILE.format(session_id=session_id)
+                        agent_results_file = self.supervisor_dir / self.cadence_config.file_patterns.agent_result_file.format(session_id=session_id)
                         logger.debug(f"Checking for agent results file: {agent_results_file}")
                         if agent_results_file.exists():
                             logger.debug(f"Agent results file exists, loading...")
@@ -1588,7 +1592,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
 
                 # Save prompt for debugging
                 prompt_file = self.validate_path(
-                    self.agent_dir / FilePatterns.PROMPT_FILE.format(session_id=session_id),
+                    self.agent_dir / self.cadence_config.file_patterns.prompt_file.format(session_id=session_id),
                     self.agent_dir
                 )
                 with open(prompt_file, 'w') as f:
@@ -1647,11 +1651,11 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
 
                 # Output files
                 output_file = self.validate_path(
-                    self.agent_dir / FilePatterns.OUTPUT_FILE.format(session_id=session_id),
+                    self.agent_dir / self.cadence_config.file_patterns.output_file.format(session_id=session_id),
                     self.agent_dir
                 )
                 error_file = self.validate_path(
-                    self.agent_dir / FilePatterns.ERROR_FILE.format(session_id=session_id),
+                    self.agent_dir / self.cadence_config.file_patterns.error_file.format(session_id=session_id),
                     self.agent_dir
                 )
 
@@ -1711,8 +1715,8 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
 
                 # Check output for completion signals
                 output_text = '\n'.join(all_output)
-                completed_normally = AgentPromptDefaults.COMPLETION_SIGNAL.upper() in output_text.upper()
-                requested_help = AgentPromptDefaults.HELP_SIGNAL.upper() in output_text.upper()
+                completed_normally = self.cadence_config.task_detection.completion_phrase.upper() in output_text.upper()
+                requested_help = self.cadence_config.task_detection.help_needed_phrase.upper() in output_text.upper()
 
                 agent_result = AgentResult(
                     success=returncode == 0,
@@ -1971,7 +1975,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
     def save_agent_results(self, agent_result: AgentResult, session_id: str, todos: List[str] = None, task_id: str = None):
             """Save agent results for supervisor to analyze"""
             results_file = self.validate_path(
-                self.supervisor_dir / FilePatterns.AGENT_RESULT_FILE.format(session_id=session_id),
+                self.supervisor_dir / self.cadence_config.file_patterns.agent_result_file.format(session_id=session_id),
                 self.supervisor_dir
             )
 

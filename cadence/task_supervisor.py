@@ -22,7 +22,7 @@ from .prompt_loader import PromptLoader
 from .task_manager import TaskManager, Task
 from .config import ConfigLoader, CadenceConfig, SUPERVISOR_LOG_DIR, SCRATCHPAD_DIR
 from .zen_integration import ZenIntegration
-from .constants import SupervisorDefaults, AgentPromptDefaults
+
 from .utils import generate_session_id
 
 
@@ -480,7 +480,7 @@ class TaskSupervisor:
 
                     # Main reading loop
                     last_status_check = time.time()
-                    status_check_interval = SupervisorDefaults.STATUS_CHECK_INTERVAL
+                    status_check_interval = self.config.processing.get('status_check_interval', 30)
 
                     while True:
                         # Check timeout

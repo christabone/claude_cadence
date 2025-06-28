@@ -125,7 +125,7 @@ cadence/prompts/
 │   ├── templates/         # Reusable templates
 │   ├── safety/           # Safety notices
 │   └── context/          # Context sections
-└── prompts.yaml          # Main configuration with !include references
+└── prompts.yml.tmpl      # Main configuration with !include references
 ```
 
 ### Zen Integration
