@@ -249,7 +249,7 @@ class TestFixAgentDispatcher:
 
         # Test that lock is acquired by patching the lock itself
         mock_lock = MagicMock()
-        dispatcher.lock = mock_lock
+        dispatcher.fix_lock = mock_lock
 
         dispatcher.should_dispatch_fix(issue)
 
