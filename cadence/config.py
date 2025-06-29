@@ -16,6 +16,13 @@ STUCK_STATUS_PHRASE = "Status: STUCK"
 SCRATCHPAD_DIR = ".cadence/scratchpad"
 SUPERVISOR_LOG_DIR = ".cadence/supervisor"
 
+# Timeout constants (in milliseconds)
+DEFAULT_AGENT_TIMEOUT_MS = 600000  # 10 minutes
+DEFAULT_FIX_TIMEOUT_MS = 300000     # 5 minutes
+DEFAULT_VERIFICATION_TIMEOUT_MS = 60000  # 1 minute
+MAX_TIMEOUT_MS = 3600000           # 1 hour
+MIN_TIMEOUT_MS = 1000              # 1 second
+
 # Processing constants (defaults, can be overridden by config)
 ZEN_OUTPUT_LINES_LIMIT = 200
 SCRATCHPAD_CHECK_LINES = 10
@@ -41,6 +48,7 @@ class ExecutionConfig:
     save_logs: bool = True
     log_dir: str = ".cadence/logs"
     subprocess_timeout: int = 300  # Timeout for subprocess calls in seconds
+    max_scratchpad_retries: int = 5  # Maximum retries for scratchpad creation
 
 
 
@@ -149,6 +157,7 @@ class OrchestrationConfig:
     quick_quit_seconds: float = 10.0
     session_timeout: int = 300  # seconds - moved from OrchestratorDefaults
     cleanup_keep_sessions: int = 5  # moved from OrchestratorDefaults
+    workflow_max_history_size: int = 1000  # Maximum state transitions to keep in workflow history
 
 
 @dataclass
@@ -215,15 +224,16 @@ class CircularDependencyConfig:
 class FixAgentDispatcherConfig:
     """Configuration for the Fix Agent Dispatcher"""
     max_attempts: int = 3
-    timeout_ms: int = 300000
+    timeout_ms: int = DEFAULT_FIX_TIMEOUT_MS
     enable_auto_fix: bool = True
     severity_threshold: Literal["low", "medium", "high", "critical"] = "high"
     enable_verification: bool = True
-    verification_timeout_ms: int = 60000
+    verification_timeout_ms: int = DEFAULT_VERIFICATION_TIMEOUT_MS
+    max_turns: int = 30  # Maximum turns for fix agent execution
     circular_dependency: CircularDependencyConfig = field(default_factory=CircularDependencyConfig)
     validation: Dict[str, int] = field(default_factory=lambda: {
-        "min_timeout_ms": 100,
-        "max_timeout_ms": 3600000
+        "min_timeout_ms": MIN_TIMEOUT_MS,
+        "max_timeout_ms": MAX_TIMEOUT_MS
     })
 
     def __post_init__(self):
@@ -237,8 +247,8 @@ class FixAgentDispatcherConfig:
         if not 1 <= self.max_attempts <= 100:
             raise ValueError("max_attempts must be between 1 and 100")
 
-        min_timeout = self.validation.get("min_timeout_ms", 100)
-        max_timeout = self.validation.get("max_timeout_ms", 3600000)
+        min_timeout = self.validation.get("min_timeout_ms", MIN_TIMEOUT_MS)
+        max_timeout = self.validation.get("max_timeout_ms", MAX_TIMEOUT_MS)
 
         if self.timeout_ms < min_timeout:
             raise ValueError(f"timeout_ms must be at least {min_timeout}ms")
@@ -295,6 +305,16 @@ class CadenceConfig:
     })
     orchestration: OrchestrationConfig = field(default_factory=OrchestrationConfig)
     fix_agent_dispatcher: FixAgentDispatcherConfig = field(default_factory=FixAgentDispatcherConfig)
+    retry_behavior: Dict[str, Any] = field(default_factory=lambda: {
+        "max_json_retries": 3,
+        "backoff_strategy": "linear",
+        "base_delay": 2,
+        "max_delay": 60,
+        "use_continue_on_failure": True,
+        "subprocess_timeout": 300,
+        "max_file_retries": 3,
+        "verbose_logging": False
+    })
 
 
 class ConfigLoader:
@@ -352,65 +372,29 @@ class ConfigLoader:
         return result
 
     def _load_config(self) -> CadenceConfig:
-        """Load configuration from file or use defaults"""
-        if not self.config_path:
-            return CadenceConfig()
+        """
+        Load configuration from YAML file if it exists, otherwise use defaults.
 
+        Returns:
+            CadenceConfig with loaded or default values
+        """
         try:
+            if not self.config_path or not self.config_path.exists():
+                logger = logging.getLogger(__name__)
+                logger.debug("No config file found, using defaults")
+                return CadenceConfig()
+
             with open(self.config_path, 'r') as f:
                 data = yaml.safe_load(f) or {}
 
-            # Parse nested configs
+            # Start with default config
             config = CadenceConfig()
 
-            # Execution config
-            if 'execution' in data:
-                config.execution = ExecutionConfig(**data['execution'])
+            # Update simple fields (dict configs)
+            self._update_dict_configs(config, data)
 
-            # Agent config
-            if 'agent' in data:
-                config.agent = AgentConfig(**data['agent'])
-
-            # Supervisor config
-            if 'supervisor' in data:
-                config.supervisor = SupervisorConfig(**data['supervisor'])
-
-            # Task detection config
-            if 'task_detection' in data:
-                config.task_detection = TaskDetectionConfig(**data['task_detection'])
-
-            # Orchestration config
-            if 'orchestration' in data:
-                config.orchestration = OrchestrationConfig(**data['orchestration'])
-
-            # Fix Agent Dispatcher config
-            if 'fix_agent_dispatcher' in data:
-                try:
-                    fad_data = data['fix_agent_dispatcher'].copy()
-                    if 'circular_dependency' in fad_data:
-                        # Handle nested dataclass
-                        try:
-                            fad_data['circular_dependency'] = CircularDependencyConfig(**fad_data['circular_dependency'])
-                        except (TypeError, ValueError) as e:
-                            logger = logging.getLogger(__name__)
-                            logger.warning(f"Invalid circular_dependency config: {e}. Using defaults.")
-                            fad_data['circular_dependency'] = CircularDependencyConfig()
-                    config.fix_agent_dispatcher = FixAgentDispatcherConfig(**fad_data)
-                except (TypeError, ValueError) as e:
-                    logger = logging.getLogger(__name__)
-                    logger.warning(f"Invalid fix_agent_dispatcher config: {e}. Using defaults.")
-                    config.fix_agent_dispatcher = FixAgentDispatcherConfig()
-
-            # Direct dictionary configs
-            for key in ['session', 'integrations', 'prompts', 'zen_integration', 'processing', 'development']:
-                if key in data:
-                    # For dictionaries, deep merge with defaults instead of replacing
-                    default_value = getattr(config, key)
-                    if isinstance(default_value, dict):
-                        merged = self._deep_merge_dict(default_value, data[key])
-                        setattr(config, key, merged)
-                    else:
-                        setattr(config, key, data[key])
+            # Handle dataclass configs with proper instantiation
+            self._update_dataclass_configs(config, data)
 
             return config
 
@@ -419,6 +403,70 @@ class ConfigLoader:
             logger.warning(f"Failed to load config from {self.config_path}: {e}")
             logger.warning("Using default configuration")
             return CadenceConfig()
+
+    def _update_dict_configs(self, config: CadenceConfig, data: dict) -> None:
+        """Update dictionary configurations with deep merge"""
+        dict_keys = ['project', 'integrations', 'zen_integration', 'processing', 'development', 'retry_behavior']
+        for key in dict_keys:
+            if key in data:
+                # For dictionaries, deep merge with defaults instead of replacing
+                default_value = getattr(config, key)
+                if isinstance(default_value, dict):
+                    merged = self._deep_merge_dict(default_value, data[key])
+                    setattr(config, key, merged)
+                else:
+                    setattr(config, key, data[key])
+
+    def _update_dataclass_configs(self, config: CadenceConfig, data: dict) -> None:
+        """Update dataclass configurations with validation"""
+        # Define dataclass config mappings
+        dataclass_configs = {
+            'execution': (ExecutionConfig, 'execution'),
+            'agent': (AgentConfig, 'agent'),
+            'supervisor': (SupervisorConfig, 'supervisor'),
+            'task_detection': (TaskDetectionConfig, 'task_detection'),
+            'session': (SessionConfig, 'session'),
+            'prompts': (PromptsConfig, 'prompts'),
+            'file_patterns': (FilePatternConfig, 'file_patterns'),
+            'orchestration': (OrchestrationConfig, 'orchestration'),
+        }
+
+        # Update each dataclass config
+        for key, (config_class, attr_name) in dataclass_configs.items():
+            if key in data:
+                self._update_single_dataclass(config, attr_name, config_class, data[key])
+
+        # Special handling for fix_agent_dispatcher
+        if 'fix_agent_dispatcher' in data:
+            self._update_fix_agent_dispatcher(config, data['fix_agent_dispatcher'])
+
+    def _update_single_dataclass(self, config: CadenceConfig, attr_name: str,
+                                  config_class: type, data: dict) -> None:
+        """Update a single dataclass configuration with error handling"""
+        try:
+            setattr(config, attr_name, config_class(**data))
+        except (TypeError, ValueError) as e:
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Invalid {attr_name} config: {e}. Using defaults.")
+            setattr(config, attr_name, config_class())
+
+    def _update_fix_agent_dispatcher(self, config: CadenceConfig, data: dict) -> None:
+        """Update fix_agent_dispatcher config with nested dataclass handling"""
+        try:
+            fad_data = data.copy()
+            if 'circular_dependency' in fad_data:
+                # Handle nested dataclass
+                try:
+                    fad_data['circular_dependency'] = CircularDependencyConfig(**fad_data['circular_dependency'])
+                except (TypeError, ValueError) as e:
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Invalid circular_dependency config: {e}. Using defaults.")
+                    fad_data['circular_dependency'] = CircularDependencyConfig()
+            config.fix_agent_dispatcher = FixAgentDispatcherConfig(**fad_data)
+        except (TypeError, ValueError) as e:
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Invalid fix_agent_dispatcher config: {e}. Using defaults.")
+            config.fix_agent_dispatcher = FixAgentDispatcherConfig()
 
     def get_tool_command_flags(self) -> List[str]:
         """Get tool-related command line flags for claude CLI"""
@@ -459,7 +507,8 @@ class ConfigLoader:
             "prompts": self.config.prompts,
             "zen_integration": self.config.zen_integration,
             "processing": self.config.processing,
-            "development": self.config.development
+            "development": self.config.development,
+            "retry_behavior": self.config.retry_behavior
         }
 
         save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -467,20 +516,86 @@ class ConfigLoader:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
     def override_from_args(self, **kwargs):
-        """Override config values from command line arguments"""
-        # Handle nested overrides
+        """Override config values from command line arguments with validation"""
+        # Define allowed override keys and their types
+        allowed_overrides = {
+            # Execution settings
+            'execution.max_agent_turns': int,
+            'execution.max_supervisor_turns': int,
+            'execution.turn_timeout': int,
+            'execution.supervisor_timeout': int,
+            'execution.cleanup_policy': str,
+            'execution.session_retention_count': int,
+            'execution.zen_code_review_frequency': str,
+            'execution.max_scratchpad_retries': int,
+
+            # Agent settings
+            'agent.process_name': str,
+            'agent.wait_timeout': int,
+
+            # Task detection
+            'task_detection.max_retries': int,
+            'task_detection.retry_delay': float,
+
+            # Orchestration settings
+            'orchestration.orchestrator_dir': str,
+            'orchestration.supervisor_dir': str,
+            'orchestration.agent_dir': str,
+
+            # Fix agent dispatcher settings
+            'fix_agent_dispatcher.max_fix_iterations': int,
+            'fix_agent_dispatcher.fix_iteration_limit': int,
+            'fix_agent_dispatcher.timeout_seconds': int,
+            'fix_agent_dispatcher.enable_logging': bool,
+        }
+
+        # Handle nested overrides with validation
         for key, value in kwargs.items():
             if value is None:
                 continue
 
+            # Check if key is allowed
+            if key not in allowed_overrides and not any(key.startswith(allowed) for allowed in allowed_overrides):
+                logger.warning(f"Ignoring unknown config override: {key}")
+                continue
+
             if '.' in key:
-                # Nested key like "checkpoint.turns"
+                # Nested key like "execution.max_agent_turns"
+                if key in allowed_overrides:
+                    # Validate type
+                    expected_type = allowed_overrides[key]
+                    try:
+                        if expected_type == bool:
+                            # Handle boolean conversion
+                            if isinstance(value, str):
+                                value = value.lower() in ('true', '1', 'yes', 'on')
+                            else:
+                                value = bool(value)
+                        else:
+                            # Convert to expected type
+                            value = expected_type(value)
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"Invalid value for {key}: {value} (expected {expected_type.__name__})")
+                        continue
+
+                # Apply the override
                 parts = key.split('.')
                 obj = self.config
-                for part in parts[:-1]:
-                    obj = getattr(obj, part)
-                setattr(obj, parts[-1], value)
+                try:
+                    for part in parts[:-1]:
+                        if not hasattr(obj, part):
+                            logger.error(f"Invalid config path: {key} (missing {part})")
+                            break
+                        obj = getattr(obj, part)
+                    else:
+                        # Only set if we successfully traversed the path
+                        if hasattr(obj, parts[-1]):
+                            setattr(obj, parts[-1], value)
+                            logger.info(f"Config override: {key} = {value}")
+                        else:
+                            logger.error(f"Invalid config attribute: {key}")
+                except AttributeError as e:
+                    logger.error(f"Error setting config override {key}: {e}")
             else:
-                # Top-level key
-                if hasattr(self.config, key):
-                    setattr(self.config, key, value)
+                # Top-level key - not allowed for safety
+                logger.warning(f"Top-level config overrides not allowed: {key}")

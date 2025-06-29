@@ -11,7 +11,7 @@ import subprocess
 import time
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass
 from datetime import datetime
 import uuid
@@ -28,6 +28,7 @@ from .prompt_loader import PromptLoader
 from .log_utils import Colors
 from .json_stream_monitor import SimpleJSONStreamMonitor
 from .workflow_state_machine import WorkflowStateManager, WorkflowState, WorkflowContext
+from .retry_utils import run_claude_with_realtime_retry, RetryError
 
 # Import dispatch system components
 from .enhanced_agent_dispatcher import EnhancedAgentDispatcher, DispatchConfig
@@ -804,6 +805,66 @@ class SupervisorOrchestrator:
                 logger.error(f"Error handling dispatch escalation: {e}")
                 dispatch_logger.log_error(e, context)
 
+    def _run_claude_with_json_retry(self,
+                                    build_command_func: Callable[[], List[str]],
+                                    parse_output_func: Callable[[List[str]], Any],
+                                    working_dir: Path,
+                                    process_name: str,
+                                    session_id: str) -> Any:
+        """
+        Run a Claude CLI command with JSON retry logic using unified retry system.
+
+        This helper method centralizes the common pattern of:
+        1. Running a subprocess that outputs JSON
+        2. Parsing the JSON output
+        3. Retrying with modified command on JSON parse failures
+
+        Args:
+            build_command_func: Function that builds the command list
+            parse_output_func: Function that parses output and returns result
+            working_dir: Directory to run the command in
+            process_name: Name for logging (e.g., "SUPERVISOR", "AGENT")
+            session_id: Current session ID
+
+        Returns:
+            Parsed result from parse_output_func
+
+        Raises:
+            RuntimeError: If command fails or JSON parsing fails after retries
+        """
+        max_retries = self.cadence_config.retry_behavior.get("max_json_retries", 3)
+
+        def realtime_runner(cmd: List[str], working_dir: Any, process_name: str) -> Tuple[int, List[str]]:
+            """Wrapper for the async realtime output function"""
+            start_time = time.time()
+            try:
+                # Use asyncio.run() for cleaner event loop management
+                returncode, all_output = asyncio.run(
+                    self.run_claude_with_realtime_output(cmd, working_dir, process_name)
+                )
+                duration = (time.time() - start_time) * 1000
+                logger.info(f"{process_name} process completed in {duration:.0f}ms with return code {returncode}")
+                return returncode, all_output
+            except Exception as e:
+                duration = (time.time() - start_time) * 1000
+                logger.error(f"{process_name} execution error after {duration:.0f}ms: {e}")
+                raise
+
+        try:
+            return run_claude_with_realtime_retry(
+                build_command_func=build_command_func,
+                parse_output_func=parse_output_func,
+                realtime_runner_func=realtime_runner,
+                working_dir=working_dir,
+                process_name=process_name,
+                max_retries=max_retries,
+                session_id=session_id,
+                base_delay=self.cadence_config.retry_behavior.get("base_delay", 2.0)
+            )
+        except RetryError as e:
+            # Convert RetryError to RuntimeError for backward compatibility
+            raise RuntimeError(str(e))
+
     def _get_recently_modified_files(self, max_files: int = 10) -> List[str]:
         """Get list of recently modified files in the project"""
         try:
@@ -971,19 +1032,19 @@ class SupervisorOrchestrator:
 
         # Display key configuration values
         logger.info("Configuration:")
-        logger.info(f"  Supervisor model: {self.config.get('supervisor', {}).get('model', 'NOT SET')}")
-        logger.info(f"  Agent model: {self.config.get('agent', {}).get('model', 'NOT SET')}")
+        logger.info(f"  Supervisor model: {self.cadence_config.supervisor.model}")
+        logger.info(f"  Agent model: {self.cadence_config.agent.model}")
 
         # Group turn configurations together (orchestrator → supervisor → agent)
-        logger.info(f"  Max orchestrator iterations: {self.config.get('orchestration', {}).get('max_iterations', 100)}")
-        logger.info(f"  Max supervisor turns: {self.config.get('execution', {}).get('max_supervisor_turns', 'NOT SET')}")
-        logger.info(f"  Max agent turns: {self.config.get('execution', {}).get('max_agent_turns', 'NOT SET')}")
+        logger.info(f"  Max orchestrator iterations: {self.cadence_config.orchestration.max_iterations}")
+        logger.info(f"  Max supervisor turns: {self.cadence_config.execution.max_supervisor_turns}")
+        logger.info(f"  Max agent turns: {self.cadence_config.execution.max_agent_turns}")
 
-        logger.info(f"  Agent timeout: {self.config.get('execution', {}).get('timeout', 'NOT SET')}s")
-        logger.info(f"  Code review frequency: {self.config.get('zen_integration', {}).get('code_review_frequency', 'NOT SET')}")
+        logger.info(f"  Agent timeout: {self.cadence_config.execution.timeout}s")
+        logger.info(f"  Code review frequency: {self.cadence_config.supervisor.zen_integration.code_review_frequency}")
 
         # Display MCP servers if configured
-        mcp_servers = self.config.get('integrations', {}).get('mcp', {})
+        mcp_servers = self.cadence_config.integrations.get('mcp', {})
         if mcp_servers:
             supervisor_servers = mcp_servers.get('supervisor_servers', [])
             agent_servers = mcp_servers.get('agent_servers', [])
@@ -1023,8 +1084,9 @@ class SupervisorOrchestrator:
         self.state["last_session_id"] = self.current_session_id
         self.save_state()
 
-        max_iterations = self.config.get("orchestration", {}).get("max_iterations", 100)
+        max_iterations = self.cadence_config.orchestration.max_iterations
         iteration = 0
+        previous_agent_needed_help = False  # Track if previous agent needed help/errored
 
         # Define completion marker file
         completion_marker = self.project_root / ".cadence" / "project_complete.marker"
@@ -1058,9 +1120,11 @@ class SupervisorOrchestrator:
                     logger.error(f"Error reading completion marker: {e}")
 
             # 1. Run supervisor to analyze and decide
+            # Determine if supervisor should use continue based on config and previous agent status
+            supervisor_use_continue = self._should_use_continue_for_supervisor(iteration, previous_agent_needed_help)
             decision = self.run_supervisor_analysis(
                 self.current_session_id,
-                use_continue=(iteration > 1),
+                use_continue=supervisor_use_continue,
                 iteration=iteration
             )
 
@@ -1079,10 +1143,14 @@ class SupervisorOrchestrator:
                     return True
                 else:
                     logger.warning("Supervisor said complete but no marker file found - continuing...")
+                    # Reset state as supervisor is handling the situation
+                    previous_agent_needed_help = False
                     # Continue to let supervisor create the marker
                     continue
             elif decision.action == "skip":
                 logger.info(f"Skipping: {decision.reason}")
+                # Reset state as supervisor is moving to new task
+                previous_agent_needed_help = False
                 continue
             elif decision.action == "execute":
                 # Save the decision as a snapshot for later review
@@ -1116,11 +1184,13 @@ class SupervisorOrchestrator:
                 )
 
                 # 3. Run agent with supervisor's TODOs
+                # Determine if agent should use continue based on config and previous agent status
+                agent_use_continue = self._should_use_continue_for_agent(iteration, previous_agent_needed_help)
                 agent_result = self.run_agent(
                     todos=todos,
                     guidance=decision.guidance,
                     session_id=self.current_session_id,
-                    use_continue=(iteration > 1),
+                    use_continue=agent_use_continue,
                     task_id=decision.task_id,
                     subtasks=decision.subtasks,
                     project_root=decision.project_path  # Pass as project_path
@@ -1188,7 +1258,8 @@ class SupervisorOrchestrator:
                 if agent_result.requested_help:
                     logger.warning("Agent requested help - supervisor will provide assistance")
 
-                # No longer first iteration
+                # Update tracking for next iteration's continue decision
+                previous_agent_needed_help = agent_result.requested_help or not agent_result.success
 
                 # 6. Continue to next iteration
                 continue
@@ -1208,104 +1279,82 @@ class SupervisorOrchestrator:
     def run_supervisor_analysis(self, session_id: str, use_continue: bool, iteration: int) -> SupervisorDecision:
             """Run supervisor in its directory to analyze state"""
             original_dir = os.getcwd()
-            max_json_retries = 5
-            json_retry_count = 0
+            supervisor_start_time = time.time()
 
             try:
                 # Change to supervisor directory
+                self._validate_directory_exists(self.supervisor_dir)
                 os.chdir(self.supervisor_dir)
 
-                while json_retry_count < max_json_retries:
-                    # Build supervisor command using Claude CLI for MCP access
-                    supervisor_script = self.project_root / "cadence" / "supervisor_cli.py"
-                    config_file = self.project_root / "config.yaml"
+                # Prepare data that doesn't change between retries
+                # Get code review config
+                code_review_frequency = self.cadence_config.supervisor.zen_integration.code_review_frequency
 
-                    # Get code review config
-                    zen_config = self.config.get("zen_integration", {})
-                    code_review_frequency = zen_config.get("code_review_frequency", "task")
-
-                    # Check if we have previous agent results (only after first iteration)
-                    previous_agent_result = None
-                    if iteration > 1:
-                        agent_results_file = self.supervisor_dir / self.cadence_config.file_patterns.agent_result_file.format(session_id=session_id)
-                        logger.debug(f"Checking for agent results file: {agent_results_file}")
-                        if agent_results_file.exists():
-                            logger.debug(f"Agent results file exists, loading...")
-                            try:
-                                with open(agent_results_file, 'r') as f:
-                                    previous_agent_result = json.load(f)
-                                logger.debug(f"Successfully loaded agent results: task_id={previous_agent_result.get('task_id', 'unknown')}")
-                            except Exception as e:
-                                logger.warning(f"Failed to load previous agent results: {e}")
-                        else:
-                            logger.debug(f"No agent results file found at {agent_results_file}")
+                # Check if we have previous agent results (only after first iteration)
+                previous_agent_result = None
+                if iteration > 1:
+                    agent_results_file = self.supervisor_dir / self.cadence_config.file_patterns.agent_result_file.format(session_id=session_id)
+                    logger.debug(f"Checking for agent results file: {agent_results_file}")
+                    if agent_results_file.exists():
+                        logger.debug(f"Agent results file exists, loading...")
+                        try:
+                            with open(agent_results_file, 'r') as f:
+                                previous_agent_result = json.load(f)
+                            logger.debug(f"Successfully loaded agent results: task_id={previous_agent_result.get('task_id', 'unknown')}")
+                        except Exception as e:
+                            logger.warning(f"Failed to load previous agent results: {e}")
                     else:
-                        logger.debug(f"First iteration - not checking for agent results")
+                        logger.debug(f"No agent results file found at {agent_results_file}")
+                else:
+                    logger.debug(f"First iteration - not checking for agent results")
 
-                    # Log agent result status
-                    if previous_agent_result is not None:
-                        logger.info(f"Previous agent result: Found (task_id={previous_agent_result.get('task_id', 'unknown')})")
-                    else:
-                        logger.info("Previous agent result: None")
+                # Log agent result status
+                if previous_agent_result is not None:
+                    logger.info(f"Previous agent result: Found (task_id={previous_agent_result.get('task_id', 'unknown')})")
+                else:
+                    logger.info("Previous agent result: None")
 
-                    # Build prompt using YAML templates
-                    context = {
-                        "project_path": str(self.project_root),  # Unified project path
-                        "session_id": session_id,
-                        "iteration": iteration,
-                        "is_first_iteration": iteration == 1,
-                        "has_previous_agent_result": previous_agent_result is not None,
-                        "agent_success": previous_agent_result.get("success", False) if previous_agent_result else False,
-                        "agent_completed_normally": previous_agent_result.get("completed_normally", False) if previous_agent_result else False,
-                        "agent_todos": previous_agent_result.get("todos", []) if previous_agent_result else [],
-                        "agent_task_id": previous_agent_result.get("task_id", "") if previous_agent_result else "",
-                        "max_turns": self.config.get("execution", {}).get("max_agent_turns", 120)  # Agent's turn limit for supervisor context
-                    }
+                # Build prompt context
+                context = {
+                    "project_path": str(self.project_root),  # Unified project path
+                    "session_id": session_id,
+                    "iteration": iteration,
+                    "is_first_iteration": iteration == 1,
+                    "has_previous_agent_result": previous_agent_result is not None,
+                    "agent_success": previous_agent_result.get("success", False) if previous_agent_result else False,
+                    "agent_completed_normally": previous_agent_result.get("completed_normally", False) if previous_agent_result else False,
+                    "agent_todos": previous_agent_result.get("todos", []) if previous_agent_result else [],
+                    "agent_task_id": previous_agent_result.get("task_id", "") if previous_agent_result else "",
+                    "max_turns": self.cadence_config.execution.max_agent_turns  # Agent's turn limit for supervisor context
+                }
 
-                    # Get base prompt
-                    logger.debug(f"Getting supervisor prompt template with context: has_previous_agent_result={context['has_previous_agent_result']}")
-                    base_prompt = self.prompt_loader.get_template("supervisor_prompts.orchestrator_taskmaster.base_prompt")
-                    base_prompt = self.prompt_loader.format_template(base_prompt, context)
+                # Get supervisor config
+                supervisor_model = self.cadence_config.supervisor.model
+                if not supervisor_model:
+                    raise ValueError("Supervisor model not specified in config")
 
-                    # Log a preview of the TASK section to verify correct template
-                    if "Process the agent's completed work" in base_prompt:
-                        logger.debug("Supervisor prompt includes agent work processing (iteration 2+)")
-                    elif "Analyze the current task state and decide what the agent should work on first" in base_prompt:
-                        logger.debug("Supervisor prompt is for first iteration (no agent work)")
-                    else:
-                        logger.warning("Supervisor prompt TASK section unclear - check template rendering")
+                supervisor_use_continue = self.cadence_config.supervisor.use_continue
 
-                    # Get code review section based on config
-                    # When code_review_frequency is "task", we should ALSO include project review
-                    # instructions so the supervisor knows to run final review before completion
-                    if code_review_frequency == "task":
-                        # Include BOTH task-level and project-level review instructions
-                        task_review_key = "supervisor_prompts.orchestrator_taskmaster.code_review_sections.task"
-                        task_review_section = self.prompt_loader.get_template(task_review_key)
-                        task_review_section = self.prompt_loader.format_template(task_review_section, context)
+                # Build allowed tools from config
+                basic_tools = self.cadence_config.supervisor.tools
+                mcp_servers = self.cadence_config.integrations.get("mcp", {}).get("supervisor_servers", [
+                    "taskmaster-ai", "zen", "serena", "Context7"
+                ])
+                # Add mcp__ prefix and * suffix to each MCP server
+                mcp_tools = [f"mcp__{server}__*" for server in mcp_servers]
+                all_tools = basic_tools + mcp_tools
 
-                        project_review_key = "supervisor_prompts.orchestrator_taskmaster.code_review_sections.project"
-                        project_review_section = self.prompt_loader.get_template(project_review_key)
-                        project_review_section = self.prompt_loader.format_template(project_review_section, context)
+                # Keep track of retry count for command building
+                json_retry_count = 0
 
-                        code_review_section = task_review_section + project_review_section
-                    else:
-                        # For "project" or "none" frequency, use only the specified section
-                        code_review_key = f"supervisor_prompts.orchestrator_taskmaster.code_review_sections.{code_review_frequency}"
-                        code_review_section = self.prompt_loader.get_template(code_review_key)
-                        code_review_section = self.prompt_loader.format_template(code_review_section, context)
+                # Define command builder function that can be called for retries
+                def build_command():
+                    nonlocal json_retry_count
 
-                    # Get zen guidance
-                    zen_guidance = self.prompt_loader.get_template("supervisor_prompts.orchestrator_taskmaster.zen_guidance")
-
-                    # Get output format
-                    output_format = self.prompt_loader.get_template("supervisor_prompts.orchestrator_taskmaster.output_format")
-                    output_format = self.prompt_loader.format_template(output_format, context)
-
-                    # If this is a retry, use a shorter prompt to avoid token limits
+                    # Build prompt based on retry status
                     if json_retry_count > 0:
                         # Create a minimal retry prompt to avoid token limits
-                        minimal_retry_prompt = f"""You are the Task Supervisor. Project root: {context['project_path']}
+                        supervisor_prompt = f"""You are the Task Supervisor. Project root: {context['project_path']}
 
 CRITICAL: Your previous output had invalid JSON formatting.
 Please analyze the current task state and output ONLY a valid JSON object.
@@ -1331,10 +1380,47 @@ For "skip" or "complete" actions:
 }}
 
 DO NOT include any explanatory text. Start with {{ and end with }}.
-Retry attempt {json_retry_count + 1} of {max_json_retries}."""
-                        supervisor_prompt = minimal_retry_prompt
+Retry attempt {json_retry_count + 1} of {self.cadence_config.retry_behavior.get("max_json_retries", 3)}."""
                     else:
-                        # Combine all sections normally
+                        # Build full prompt using YAML templates
+                        logger.debug(f"Getting supervisor prompt template with context: has_previous_agent_result={context['has_previous_agent_result']}")
+                        base_prompt = self.prompt_loader.get_template("supervisor_prompts.orchestrator_taskmaster.base_prompt")
+                        base_prompt = self.prompt_loader.format_template(base_prompt, context)
+
+                        # Log a preview of the TASK section to verify correct template
+                        if "Process the agent's completed work" in base_prompt:
+                            logger.debug("Supervisor prompt includes agent work processing (iteration 2+)")
+                        elif "Analyze the current task state and decide what the agent should work on first" in base_prompt:
+                            logger.debug("Supervisor prompt is for first iteration (no agent work)")
+                        else:
+                            logger.warning("Supervisor prompt TASK section unclear - check template rendering")
+
+                        # Get code review section based on config
+                        if code_review_frequency == "task":
+                            # Include BOTH task-level and project-level review instructions
+                            task_review_key = "supervisor_prompts.orchestrator_taskmaster.code_review_sections.task"
+                            task_review_section = self.prompt_loader.get_template(task_review_key)
+                            task_review_section = self.prompt_loader.format_template(task_review_section, context)
+
+                            project_review_key = "supervisor_prompts.orchestrator_taskmaster.code_review_sections.project"
+                            project_review_section = self.prompt_loader.get_template(project_review_key)
+                            project_review_section = self.prompt_loader.format_template(project_review_section, context)
+
+                            code_review_section = task_review_section + project_review_section
+                        else:
+                            # For "project" or "none" frequency, use only the specified section
+                            code_review_key = f"supervisor_prompts.orchestrator_taskmaster.code_review_sections.{code_review_frequency}"
+                            code_review_section = self.prompt_loader.get_template(code_review_key)
+                            code_review_section = self.prompt_loader.format_template(code_review_section, context)
+
+                        # Get zen guidance
+                        zen_guidance = self.prompt_loader.get_template("supervisor_prompts.orchestrator_taskmaster.zen_guidance")
+
+                        # Get output format
+                        output_format = self.prompt_loader.get_template("supervisor_prompts.orchestrator_taskmaster.output_format")
+                        output_format = self.prompt_loader.format_template(output_format, context)
+
+                        # Combine all sections
                         supervisor_prompt = f"{base_prompt}{code_review_section}{zen_guidance}{output_format}"
 
                     # Save supervisor prompt to file for debugging
@@ -1347,27 +1433,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                     except Exception as e:
                         logger.warning(f"Failed to save supervisor prompt: {e}")
 
-                    # Build allowed tools from config
-                    basic_tools = self.config.get("supervisor", {}).get("tools", [
-                        "bash", "read", "write", "edit", "grep", "glob", "search", "WebFetch"
-                    ])
-                    mcp_servers = self.config.get("integrations", {}).get("mcp", {}).get("supervisor_servers", [
-                        "taskmaster-ai", "zen", "serena", "Context7"
-                    ])
-                    # Add mcp__ prefix and * suffix to each MCP server
-                    mcp_tools = [f"mcp__{server}__*" for server in mcp_servers]
-                    all_tools = basic_tools + mcp_tools
-
-                    # Get supervisor model from config
-                    supervisor_config = self.config.get("supervisor")
-                    if not supervisor_config:
-                        raise ValueError("Supervisor configuration not found in config")
-
-                    supervisor_model = supervisor_config.get("model")
-                    if not supervisor_model:
-                        raise ValueError("Supervisor model not specified in config")
-
-
+                    # Build command
                     cmd = [
                         "claude",
                         "-p", supervisor_prompt,
@@ -1379,14 +1445,11 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                         "--dangerously-skip-permissions"  # Skip permission prompts
                     ]
 
-                    # Check config for supervisor continuation setting
-                    supervisor_use_continue = supervisor_config.get("use_continue", True)  # Default to True for backward compatibility
-
                     # Add --continue flag based on config and conditions
                     if supervisor_use_continue and (use_continue or json_retry_count > 0):
                         cmd.append("--continue")
                         if json_retry_count > 0:
-                            logger.warning(f"Retrying supervisor with --continue due to JSON parsing error (attempt {json_retry_count + 1})")
+                            logger.debug("Adding --continue flag for retry")
                         else:
                             logger.debug("Running supervisor with --continue flag")
                     else:
@@ -1395,162 +1458,112 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                         else:
                             logger.debug("Running supervisor (first run)")
 
+                    logger.debug(f"Command: {' '.join(cmd[:3])}...")  # Don't log full prompt
+                    return cmd
 
-                    # Run supervisor
-                    logger.debug(f"Command: {' '.join(cmd)}")
-                    logger.info("-" * 60)
-                    if json_retry_count > 0:
-                        logger.info(f"SUPERVISOR STARTING... (JSON RETRY {json_retry_count + 1}/{max_json_retries})")
-                    else:
-                        logger.info("SUPERVISOR STARTING...")
-                    logger.info("-" * 60)
+                # Define output parser function
+                def parse_output(all_output):
+                    nonlocal json_retry_count
 
-                    # Run supervisor with real-time output
-                    supervisor_start_time = time.time()
-                    supervisor_end_time = None
-                    supervisor_duration = None
-                    try:
-                        logger.debug(f"Starting supervisor subprocess with {len(cmd)} args")
-                        # Run supervisor async for real-time output
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
+                    logger.debug(f"Parsing supervisor output from {len(all_output)} lines...")
+                    logger.debug(f"First 3 output lines: {all_output[:3] if all_output else 'None'}")
+                    logger.debug(f"Last 3 output lines: {all_output[-3:] if all_output else 'None'}")
+
+                    # Single-pass parsing: look for decision JSON and keep the parsed objects
+                    found_decisions = []
+
+                    # Create JSON stream monitor
+                    json_monitor = SimpleJSONStreamMonitor()
+
+                    # Process all output lines to find JSON objects (single pass)
+                    for line_str in all_output:
                         try:
-                            returncode, all_output = loop.run_until_complete(
-                                self.run_claude_with_realtime_output(cmd, self.supervisor_dir, "SUPERVISOR")
-                            )
-                            supervisor_end_time = time.time()
-                            supervisor_duration = (supervisor_end_time - supervisor_start_time) * 1000
-                            logger.info(f"Supervisor process completed in {supervisor_duration:.0f}ms with return code {returncode}")
-                        finally:
-                            loop.close()
+                            # Parse the stream-json line
+                            data = json.loads(line_str)
+                            if data.get('type') == 'assistant':
+                                # Extract content from assistant message
+                                content = data.get('message', {}).get('content', [])
+                                # Handle content as a list of items
+                                if isinstance(content, list):
+                                    for item in content:
+                                        if isinstance(item, dict) and item.get('type') == 'text':
+                                            text = item.get('text', '')
+                                            # Process each line of the text with the JSON monitor
+                                            for text_line in text.split('\n'):
+                                                result = json_monitor.process_line(text_line)
+                                                if result and isinstance(result, dict) and 'action' in result:
+                                                    # Store the parsed object directly (no double parsing)
+                                                    found_decisions.append(result)
+                                            # Reset monitor after each text block
+                                            json_monitor.reset()
+                        except json.JSONDecodeError:
+                            # This line wasn't JSON, skip it
+                            continue
 
-                        if returncode != 0:
-                            logger.error(f"Supervisor failed with code {returncode}")
-                            logger.error(f"Output lines collected: {len(all_output)}")
-                            if all_output:
-                                logger.error(f"Last few output lines: {all_output[-5:]}")
-                            raise RuntimeError(f"Supervisor failed with exit code {returncode}")
-
-                    except asyncio.TimeoutError as e:
-                        supervisor_end_time = time.time()
-                        supervisor_duration = (supervisor_end_time - supervisor_start_time) * 1000
-                        logger.error(f"Supervisor timed out after {supervisor_duration:.0f}ms: {e}")
-                        raise RuntimeError(f"Supervisor execution timed out after {supervisor_duration:.0f}ms")
-                    except Exception as e:
-                        supervisor_end_time = time.time()
-                        supervisor_duration = (supervisor_end_time - supervisor_start_time) * 1000
-                        logger.error(f"Supervisor execution error after {supervisor_duration:.0f}ms: {e}")
-                        logger.error(f"Exception type: {type(e).__name__}")
-                        import traceback
-                        logger.error(f"Traceback: {traceback.format_exc()}")
-                        raise RuntimeError(f"Supervisor execution failed: {e}")
-
-                    logger.info("-" * 60)
-                    logger.info("SUPERVISOR COMPLETED")
-                    logger.info("-" * 60)
-
-                    # Parse supervisor JSON output using SimpleJSONStreamMonitor
-                    try:
-                        logger.debug(f"Parsing supervisor output from {len(all_output)} lines...")
-                        logger.debug(f"First 3 output lines: {all_output[:3] if all_output else 'None'}")
-                        logger.debug(f"Last 3 output lines: {all_output[-3:] if all_output else 'None'}")
-
-                        # Look for the decision JSON in assistant messages
-                        json_str = None
-                        found_jsons = []
-
-                        # Create JSON stream monitor
-                        from .json_stream_monitor import SimpleJSONStreamMonitor
-                        json_monitor = SimpleJSONStreamMonitor()
-
-                        # Process all output lines to find JSON objects
-                        for line_str in all_output:
+                    # Take the LAST valid decision found
+                    if not found_decisions:
+                        logger.error("No decision JSON found in supervisor output")
+                        logger.error(f"Total output lines processed: {len(all_output)}")
+                        # Log a sample of assistant messages for debugging
+                        assistant_lines = []
+                        for line_str in all_output[:10]:  # Just first 10 to avoid spam
                             try:
-                                # Parse the stream-json line
                                 data = json.loads(line_str)
                                 if data.get('type') == 'assistant':
-                                    # Extract content from assistant message
-                                    content = data.get('message', {}).get('content', [])
-                                    # Handle content as a list of items
-                                    if isinstance(content, list):
-                                        for item in content:
-                                            if isinstance(item, dict) and item.get('type') == 'text':
-                                                text = item.get('text', '')
-                                                # Process each line of the text with the JSON monitor
-                                                for text_line in text.split('\n'):
-                                                    result = json_monitor.process_line(text_line)
-                                                    if result and isinstance(result, dict) and 'action' in result:
-                                                        # Convert back to string for compatibility
-                                                        found_jsons.append(json.dumps(result))
-                                                # Reset monitor after each text block
-                                                json_monitor.reset()
-                            except json.JSONDecodeError:
-                                # This line wasn't JSON, skip it
-                                continue
+                                    assistant_lines.append(line_str[:200])  # Truncate for readability
+                            except:
+                                pass
+                        logger.error(f"Sample assistant message lines: {assistant_lines}")
+                        raise ValueError("No decision JSON found in supervisor output")
 
-                        # Take the LAST valid JSON found (the final decision)
-                        if found_jsons:
-                            json_str = found_jsons[-1]
+                    decision_data = found_decisions[-1]  # Take the last decision (no re-parsing needed)
+                    logger.debug(f"Found decision: {decision_data.get('action', 'unknown')} action")
 
-                        if not json_str:
-                            logger.error("No decision JSON found in supervisor output")
-                            logger.error(f"Found {len(found_jsons)} candidate JSONs using SimpleJSONStreamMonitor")
-                            logger.error(f"Total output lines processed: {len(all_output)}")
-                            # Log a sample of assistant messages for debugging
-                            assistant_lines = []
-                            for line_str in all_output[:10]:  # Just first 10 to avoid spam
-                                try:
-                                    data = json.loads(line_str)
-                                    if data.get('type') == 'assistant':
-                                        assistant_lines.append(line_str[:200])  # Truncate for readability
-                                except:
-                                    pass
-                            logger.error(f"Sample assistant message lines: {assistant_lines}")
-                            raise ValueError("No decision JSON found in supervisor output")
-
-                        logger.debug(f"Found decision JSON: {json_str[:100]}...")
-                        decision_data = json.loads(json_str)
-
-                        # Validate required fields based on action
-                        if decision_data.get('action') == 'execute':
-                            # For execute action, check for new subtasks structure
-                            if 'subtasks' in decision_data:
-                                required_fields = ['action', 'task_id', 'task_title', 'subtasks', 'project_root', 'session_id', 'reason']  # Note: project_root is kept for backward compatibility in JSON
-                            else:
-                                # Backward compatibility with todos
-                                required_fields = ['action', 'todos', 'guidance', 'task_id', 'session_id', 'reason']
+                    # Validate required fields based on action
+                    if decision_data.get('action') == 'execute':
+                        # For execute action, check for new subtasks structure
+                        if 'subtasks' in decision_data:
+                            required_fields = ['action', 'task_id', 'task_title', 'subtasks', 'project_root', 'session_id', 'reason']  # Note: project_root is kept for backward compatibility in JSON
                         else:
-                            # For skip/complete actions
-                            required_fields = ['action', 'session_id', 'reason']
+                            # Backward compatibility with todos
+                            required_fields = ['action', 'todos', 'guidance', 'task_id', 'session_id', 'reason']
+                    else:
+                        # For skip/complete actions
+                        required_fields = ['action', 'session_id', 'reason']
 
-                        missing_fields = [field for field in required_fields if field not in decision_data]
-                        if missing_fields:
-                            raise ValueError(f"Decision JSON missing required fields: {missing_fields}")
+                    missing_fields = [field for field in required_fields if field not in decision_data]
+                    if missing_fields:
+                        raise ValueError(f"Decision JSON missing required fields: {missing_fields}")
 
-                        # Success! Reset retry counter and break out of retry loop
-                        json_retry_count = 0
-                        break
+                    # Increment retry count for next iteration
+                    json_retry_count += 1
 
-                    except (json.JSONDecodeError, ValueError) as e:
-                        json_retry_count += 1
-                        logger.error(f"Failed to parse supervisor output as JSON: {e}")
+                    return decision_data
 
-                        if json_retry_count >= max_json_retries:
-                            logger.error(f"Failed to get valid JSON after {max_json_retries} attempts. Giving up.")
-                            # Show last few lines of output for debugging
-                            if all_output:
-                                logger.error("Last 5 lines of output:")
-                                for line in all_output[-5:]:
-                                    logger.error(f"  {line.strip()}")
-                            raise RuntimeError(f"Supervisor failed to produce valid JSON after {max_json_retries} attempts")
+                # Define error return function
+                def create_error_decision(error_msg):
+                    supervisor_execution_time = time.time() - supervisor_start_time
+                    quick_quit_threshold = self.cadence_config.orchestration.quick_quit_seconds
+                    return SupervisorDecision(
+                        action="skip",
+                        session_id=session_id,
+                        reason=f"Error: {error_msg}",
+                        execution_time=supervisor_execution_time,
+                        quit_too_quickly=supervisor_execution_time < quick_quit_threshold
+                    )
 
-                        logger.warning(f"Will retry supervisor to get valid JSON output...")
-                        # Continue to next iteration of retry loop
-                        continue
+                # Use the helper to run with retry
+                decision_data = self._run_claude_with_json_retry(
+                    build_command_func=build_command,
+                    parse_output_func=parse_output,
+                    working_dir=self.supervisor_dir,
+                    process_name="SUPERVISOR",
+                    session_id=session_id
+                )
 
                 # Calculate execution time
                 supervisor_execution_time = time.time() - supervisor_start_time
-                quick_quit_threshold = self.config.get("orchestration", {}).get("quick_quit_seconds", 10.0)
+                quick_quit_threshold = self.cadence_config.orchestration.quick_quit_seconds
 
                 # Create decision object
                 # Map project_root from JSON to project_path for internal use
@@ -1576,6 +1589,87 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
 
 
 
+    def _determine_agent_help_status(self, status: str, agent_data: Dict) -> bool:
+        """
+        Determine if agent requested help based on status and data.
+
+        Args:
+            status: Agent status ("success", "help_needed", "error")
+            agent_data: Full agent JSON response data
+
+        Returns:
+            True if agent needs help, False if agent completed successfully
+        """
+        # Explicit status-based determination
+        if status == "success":
+            return False
+        elif status in ["help_needed", "error"]:
+            return True
+        else:
+            # For unknown status, check help_needed field or default to needing help
+            return agent_data.get("help_needed", True)
+
+    def _validate_directory_exists(self, directory: Path) -> None:
+        """
+        Validate that a directory exists before changing to it.
+
+        Args:
+            directory: Path to validate
+
+        Raises:
+            FileNotFoundError: If directory does not exist
+        """
+        if not directory.is_dir():
+            raise FileNotFoundError(f"Directory does not exist: {directory}")
+
+    def _should_use_continue_for_supervisor(self, iteration: int, previous_agent_needed_help: bool) -> bool:
+        """
+        Determine if supervisor should use --continue flag based on config and previous agent status.
+
+        Args:
+            iteration: Current iteration number (1-based)
+            previous_agent_needed_help: True if previous agent needed help/errored
+
+        Returns:
+            True if supervisor should use --continue flag
+        """
+        if iteration == 1:
+            return False  # Never continue on first iteration
+
+        supervisor_config = self.cadence_config.supervisor
+        supervisor_use_continue_config = supervisor_config.use_continue
+
+        if supervisor_use_continue_config:
+            # Config says always continue after first iteration
+            return True
+        else:
+            # Config says only continue on errors/help needed
+            return previous_agent_needed_help
+
+    def _should_use_continue_for_agent(self, iteration: int, previous_agent_needed_help: bool) -> bool:
+        """
+        Determine if agent should use --continue flag based on config and previous agent status.
+
+        Args:
+            iteration: Current iteration number (1-based)
+            previous_agent_needed_help: True if previous agent needed help/errored
+
+        Returns:
+            True if agent should use --continue flag
+        """
+        if iteration == 1:
+            return False  # Never continue on first iteration
+
+        agent_config = self.cadence_config.agent
+        agent_use_continue_config = agent_config.use_continue
+
+        if agent_use_continue_config:
+            # Config says always continue after first iteration
+            return True
+        else:
+            # Config says only continue on errors/help needed
+            return previous_agent_needed_help
+
     def run_agent(self, todos: List[str], guidance: str,
                       session_id: str, use_continue: bool,
                       task_id: str = None, subtasks: List[Dict] = None,
@@ -1585,6 +1679,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
 
             try:
                 # Change to agent directory
+                self._validate_directory_exists(self.agent_dir)
                 os.chdir(self.agent_dir)
 
                 # Create prompt with TODOs
@@ -1599,55 +1694,20 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                     f.write(prompt)
 
                 # Get agent model from config
-                agent_config = self.config.get("agent")
-                if not agent_config:
-                    raise ValueError("Agent configuration not found in config")
-
-                agent_model = agent_config.get("model")
+                agent_model = self.cadence_config.agent.model
                 if not agent_model:
                     raise ValueError("Agent model not specified in config")
 
-
-                # Build claude command
-                cmd = ["claude"]
-
-                # Check config for agent continuation setting
-                agent_use_continue = agent_config.get("use_continue", True)  # Default to True for backward compatibility
-
-                # Add --continue flag based on config and conditions
-                if agent_use_continue and use_continue:
-                    cmd.extend(["-c", "-p", prompt])
-                    logger.debug("Running agent with --continue flag")
-                else:
-                    cmd.extend(["-p", prompt])
-                    if not agent_use_continue:
-                        logger.debug("Running agent without --continue flag (disabled in config)")
-                    else:
-                        logger.debug("Running agent (first run)")
-
-                cmd.extend([
-                    "--model", agent_model,
-                    "--max-turns", str(self.config.get("execution", {}).get("max_agent_turns", 120)),
-                    "--output-format", "stream-json",
-                    "--verbose",
-                    "--dangerously-skip-permissions"  # Skip permission prompts
-                ])
-
                 # Build allowed tools from config
-                basic_tools = self.config.get("agent", {}).get("tools", [
-                    "bash", "read", "write", "edit", "grep", "glob", "search",
-                    "todo_read", "todo_write", "WebFetch"
-                ])
+                basic_tools = self.cadence_config.agent.tools
 
                 # Get MCP servers from config
-                mcp_servers = self.config.get("integrations", {}).get("mcp", {}).get("agent_servers", [
+                mcp_servers = self.cadence_config.integrations.get("mcp", {}).get("agent_servers", [
                     "serena", "Context7"
                 ])
                 # Add mcp__ prefix and * suffix to each MCP server
                 mcp_tools = [f"mcp__{server}__*" for server in mcp_servers]
                 all_tools = basic_tools + mcp_tools
-
-                cmd.extend(["--allowedTools", ",".join(all_tools)])
 
                 # Output files
                 output_file = self.validate_path(
@@ -1659,7 +1719,6 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                     self.agent_dir
                 )
 
-                logger.debug(f"Command: {' '.join(cmd[:3])}...")  # Don't log full prompt
                 logger.debug(f"Working directory: {os.getcwd()}")
 
                 logger.info("=" * 50)
@@ -1667,27 +1726,96 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                 logger.info(f"Working on {len(todos)} TODOs")
                 logger.info("=" * 50)
 
-                # Run agent with real-time output
-                start_time = time.time()
-                try:
-                    # Run agent async for real-time output
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        returncode, all_output = loop.run_until_complete(
-                            self.run_claude_with_realtime_output(cmd, self.agent_dir, "AGENT")
-                        )
-                    finally:
-                        loop.close()
+                # Create build command function for retry system
+                def build_agent_command():
+                    """Build agent command, potentially adding --continue on retry"""
+                    base_cmd = ["claude"]
 
-                    # Save output to file
+                    # Check config for agent continuation setting
+                    agent_use_continue = agent_config.get("use_continue", True)
+
+                    # Add --continue flag based on config and conditions
+                    if agent_use_continue and use_continue:
+                        base_cmd.extend(["-c", "-p", prompt])
+                    else:
+                        base_cmd.extend(["-p", prompt])
+
+                    base_cmd.extend([
+                        "--model", agent_model,
+                        "--max-turns", str(self.cadence_config.execution.max_agent_turns),
+                        "--output-format", "stream-json",
+                        "--verbose",
+                        "--dangerously-skip-permissions"
+                    ])
+                    base_cmd.extend(["--allowedTools", ",".join(all_tools)])
+                    return base_cmd
+
+                # Create parse function for agent output
+                def parse_agent_output(all_output: List[str]) -> Dict:
+                    """Parse agent output and return structured result"""
+                    output_text = '\n'.join(all_output)
+
+                    # Save raw output to file
                     with open(output_file, 'w') as out:
-                        for line in all_output:
-                            out.write(line + '\n')
+                        out.write(output_text)
 
-                    # Write empty error file
+                    # Write empty error file by default
                     with open(error_file, 'w') as err:
                         err.write("")
+
+                    # Efficient single-pass JSON extraction: Find last valid JSON object
+                    # Agent instructions specify JSON result should be at the end of output
+                    end_brace_pos = output_text.rfind('}')
+                    if end_brace_pos != -1:
+                        # Scan backwards to find matching opening brace
+                        brace_level = 0
+                        start_brace_pos = -1
+                        for i in range(end_brace_pos, -1, -1):
+                            if output_text[i] == '}':
+                                brace_level += 1
+                            elif output_text[i] == '{':
+                                brace_level -= 1
+                                if brace_level == 0:
+                                    start_brace_pos = i
+                                    break
+
+                        if start_brace_pos != -1:
+                            candidate_json_str = output_text[start_brace_pos:end_brace_pos + 1]
+                            try:
+                                agent_data = json.loads(candidate_json_str)
+                                # Validate that this is the agent's result JSON
+                                if 'status' in agent_data and 'session_id' in agent_data:
+                                    # Validate required fields
+                                    required_fields = ['status', 'session_id']
+                                    missing_fields = [field for field in required_fields if field not in agent_data]
+                                    if missing_fields:
+                                        raise ValueError(f"Agent JSON missing required fields: {missing_fields}")
+                                    return agent_data
+                            except json.JSONDecodeError:
+                                logger.warning("Found JSON-like block at end of output, but it failed to parse")
+
+                    # Fallback to text pattern detection for backward compatibility
+                    logger.warning("No agent JSON result found, falling back to text pattern detection")
+                    completed_normally = self.cadence_config.task_detection.completion_phrase.upper() in output_text.upper()
+                    requested_help = self.cadence_config.task_detection.help_needed_phrase.upper() in output_text.upper()
+
+                    return {
+                        "status": "success" if completed_normally else ("help_needed" if requested_help else "help_needed"),
+                        "help_needed": requested_help,
+                        "session_id": session_id,
+                        "summary": "Agent execution completed (fallback parsing)" if completed_normally else "Agent execution incomplete (fallback parsing)"
+                    }
+
+                # Run agent with retry system
+                start_time = time.time()
+                try:
+                    agent_data = self._run_claude_with_json_retry(
+                        build_command_func=build_agent_command,
+                        parse_output_func=parse_agent_output,
+                        working_dir=self.agent_dir,
+                        process_name="AGENT",
+                        session_id=session_id
+                    )
 
                 except Exception as e:
                     logger.error(f"Agent execution error: {e}")
@@ -1708,18 +1836,22 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                 logger.info(f"AGENT COMPLETED in {execution_time:.2f}s")
                 logger.info("=" * 50)
 
-                # Analyze results
-                completed_normally = False
-                requested_help = False
+                # Extract results from simplified 3-status system
+                status = agent_data.get("status", "help_needed")  # Default to help_needed if unclear
+
+                # Simplified status mapping
+                completed_normally = (status == "success")
+                requested_help = self._determine_agent_help_status(status, agent_data)
                 errors = []
 
-                # Check output for completion signals
-                output_text = '\n'.join(all_output)
-                completed_normally = self.cadence_config.task_detection.completion_phrase.upper() in output_text.upper()
-                requested_help = self.cadence_config.task_detection.help_needed_phrase.upper() in output_text.upper()
+                # Extract error information if present
+                if status == "error":
+                    error_msg = agent_data.get("error_message", "Unknown error")
+                    error_type = agent_data.get("error_type", "unknown")
+                    errors.append(f"{error_type}: {error_msg}")
 
                 agent_result = AgentResult(
-                    success=returncode == 0,
+                    success=(status == "success"),  # Success only when explicitly successful
                     session_id=session_id,
                     output_file=str(output_file),
                     error_file=str(error_file),
@@ -1727,7 +1859,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                     completed_normally=completed_normally,
                     requested_help=requested_help,
                     errors=errors,
-                    quit_too_quickly=execution_time < self.config.get("orchestration", {}).get("quick_quit_seconds", 10.0)
+                    quit_too_quickly=execution_time < self.cadence_config.orchestration.quick_quit_seconds
                 )
 
                 logger.info(f"Agent execution complete in {execution_time:.2f}s")
@@ -1750,7 +1882,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
             prompt_generator = PromptGenerator(self.prompt_loader)
 
             session_id = self.current_session_id if hasattr(self, 'current_session_id') else "unknown"
-            max_turns = self.config.get("execution", {}).get("max_agent_turns", 120)
+            max_turns = self.cadence_config.execution.max_agent_turns
 
             # Create ExecutionContext properly for both paths
             context = ExecutionContext(
@@ -1831,6 +1963,16 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
                     # Fallback: prepend
                     base_prompt = task_master_info + base_prompt
 
+            # Add agent JSON output format instructions
+            agent_output_format = self.prompt_loader.get_template("agent_output_format")
+            context_for_format = {
+                "session_id": session_id
+            }
+            agent_output_format = self.prompt_loader.format_template(agent_output_format, context_for_format)
+
+            # Insert at the end before any final reminders
+            base_prompt += f"\n\n{agent_output_format}"
+
             return base_prompt
 
 
@@ -1908,6 +2050,7 @@ Retry attempt {json_retry_count + 1} of {max_json_retries}."""
 
         original_dir = os.getcwd()
         try:
+            self._validate_directory_exists(self.agent_dir)
             os.chdir(self.agent_dir)
 
             # Build command using same pattern as main agent

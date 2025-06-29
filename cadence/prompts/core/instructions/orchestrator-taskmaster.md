@@ -237,6 +237,12 @@ If the current task has no pending subtasks or cannot be worked on
 #### "complete"
 If all tasks in the project are done
 
+#### "get_next_task"
+If you need TaskMaster to provide the next available task
+* Use this when you're not sure what task to work on next
+* The orchestrator will continue to the next iteration, allowing you to call TaskMaster MCP tools
+* This is useful when you want to defer task selection to the next supervisor iteration
+
 {% if has_previous_agent_result %}
 **REMINDER**: You should have already processed the agent's work in the CRITICAL section above.
 If you haven't updated Task Master subtasks yet, STOP and do that first!

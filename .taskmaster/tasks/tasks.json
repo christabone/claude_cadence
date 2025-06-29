@@ -3,158 +3,71 @@
     "tasks": [
       {
         "id": 1,
-        "title": "Implement JSON Stream Monitor",
-        "description": "Create a minimal JSON stream parser to handle basic buffering for multi-line JSON objects from agent output",
-        "status": "done",
-        "dependencies": [],
+        "title": "Extract hardcoded retry values to config.yaml",
+        "description": "Move hardcoded retry configuration values from orchestrator.py to config.yaml for centralized configuration management",
+        "details": "Identify and move max_json_retries (line 1329) and max_turns values from orchestrator.py to config.yaml. Create a retry_behavior section in config.yaml with appropriate default values. Update orchestrator.py to read these values from the configuration instead of using hardcoded constants. Ensure backward compatibility and proper error handling if config values are missing.",
+        "testStrategy": "Verify that orchestrator.py correctly reads retry values from config.yaml. Test with missing config values to ensure graceful fallbacks. Validate that retry behavior remains consistent with previous hardcoded implementation.",
         "priority": "high",
-        "details": "Develop a simple JSONStreamMonitor class with basic buffering to handle multi-line JSON objects from streaming output. Focus on minimal implementation under 100 lines of code total - just buffer input until valid JSON is complete, then return it. No complex event systems, state machines, or advanced error recovery. Simple approach: accumulate text until JSON.loads() succeeds, then yield the parsed object and reset buffer.",
-        "testStrategy": "Basic unit tests with simple JSON streams, test multi-line JSON parsing, verify buffer reset after successful parse",
-        "subtasks": [
-          {
-            "id": 3,
-            "title": "Implement minimal JSONStreamMonitor class with basic buffering",
-            "description": "Create simple JSONStreamMonitor class that buffers text until valid JSON is complete",
-            "status": "done",
-            "dependencies": [],
-            "details": "Implement a minimal class under 100 lines that accumulates text in a buffer, attempts JSON.loads() on each new input, and yields complete JSON objects when parsing succeeds. Reset buffer after successful parse. No complex features - just basic buffering for multi-line JSON.\n<info added on 2025-06-27T01:42:01.210Z>\nSimplified requirements: Create a basic class that appends incoming text to a buffer, attempts JSON.loads() after each newline, yields successfully parsed JSON objects, and clears the buffer on success. Maximum 50 lines total. Remove any state machine logic or complex parsing features - just simple accumulate-and-try approach.\n</info added on 2025-06-27T01:42:01.210Z>",
-            "testStrategy": ""
-          },
-          {
-            "id": 4,
-            "title": "Add basic integration with existing stream processing",
-            "description": "Integrate the minimal JSONStreamMonitor into existing orchestrator pipeline",
-            "status": "done",
-            "dependencies": [],
-            "details": "Add the simple JSONStreamMonitor to the existing stream processing without breaking current functionality. Focus on drop-in replacement that just handles multi-line JSON better than current line-by-line approach.\n<info added on 2025-06-27T01:42:20.885Z>\nReplace the existing line-by-line JSON parsing logic in run_claude_with_realtime_output function with a direct call to JSONStreamMonitor. Keep the current output handling structure intact, just swap out the parsing mechanism to use the monitor's buffering capability for handling multi-line JSON responses. This should be a minimal code change focused solely on the parsing layer.\n</info added on 2025-06-27T01:42:20.885Z>",
-            "testStrategy": ""
-          },
-          {
-            "id": 5,
-            "title": "Write basic tests for JSONStreamMonitor functionality",
-            "description": "Create simple unit tests to verify multi-line JSON parsing works correctly",
-            "status": "done",
-            "dependencies": [],
-            "details": "Write basic tests that verify the JSONStreamMonitor can handle multi-line JSON objects, reset buffer after successful parsing, and integrate properly with existing code. Keep tests simple and focused.\n<info added on 2025-06-27T01:42:38.002Z>\nWrite 2-3 basic unit tests: test single-line JSON parsing, test multi-line JSON object parsing, test buffer clearing after successful parse. Keep tests minimal and focused on core functionality only.\n</info added on 2025-06-27T01:42:38.002Z>",
-            "testStrategy": ""
-          },
-          {
-            "id": 1,
-            "title": "Analyze existing JSON stream handling in supervisor/agent communication",
-            "description": "Review and document how JSON streams are currently handled between the supervisor and agents, including parsing mechanisms, error handling, and buffering strategies",
-            "details": "Examine the current implementation of JSON communication between supervisor and agents to understand existing patterns, identify gaps, and inform the design of the JSONStreamMonitor class. This analysis will ensure the new system builds upon and improves existing functionality.\n<info added on 2025-06-27T01:21:52.799Z>\nCompleted comprehensive analysis of existing JSON stream handling architecture. Created detailed documentation at docs/analysis/json_stream_handling_analysis.md outlining current implementation patterns and identifying key gaps.\n\nKey findings from analysis:\n- Current implementation uses line-by-line processing without buffering for partial JSON objects\n- No state management or recovery mechanisms for incomplete reads\n- Inconsistent JSON detection approaches between supervisor (regex-based) and agent (simple parsing)\n- Tight coupling between JSON parsing and display logic with no event system\n- Limited error recovery that simply falls back to text processing\n- Absence of JSON schema validation capabilities\n\nThese findings clearly define the requirements for JSONStreamMonitor design: implement proper buffering mechanisms, add state management for partial reads, create unified JSON detection logic, establish event-driven architecture to decouple parsing from display, enhance error recovery capabilities, and integrate JSON schema validation. The analysis provides a solid foundation for designing the class interface and event system in the next subtask.\n</info added on 2025-06-27T01:21:52.799Z>",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 1
-          },
-          {
-            "id": 2,
-            "title": "Design JSONStreamMonitor class interface and event system based on current implementation",
-            "description": "Create detailed design for JSONStreamMonitor class including methods, properties, event types, and integration points",
-            "details": "Design the core JSONStreamMonitor class that will handle buffering, parsing, and event emission for JSON objects in the stream. Define clear interfaces for stream processing, error handling, and event notifications.\n<info added on 2025-06-27T01:28:17.060Z>\nCompleted comprehensive design phase. Created three key design documents: json_stream_monitor_design.md (full class design with detailed interface), json_stream_monitor_integration.py (concrete integration examples), and json_stream_monitor_summary.md (design summary and implementation plan). Key design decisions include state machine approach for efficient single-pass parsing, event-driven architecture with three event types (json_complete, parse_error, buffer_overflow), robust error recovery mechanism, and buffer management with configurable limits. Design includes specific integration components: enhanced run_claude_with_realtime_output method, SupervisorDecisionExtractor for finding decision JSON, and CodeReviewTriggerDetector for future code review detection. All design work complete and ready for implementation phase starting with stream buffering implementation.\n</info added on 2025-06-27T01:28:17.060Z>",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 1
-          }
-        ]
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
       },
       {
         "id": 2,
-        "title": "Create State Machine for Workflow Tracking",
-        "description": "Implement a state machine to track workflow states through working → review → fixing → complete transitions",
-        "details": "Build a WorkflowStateMachine class using the state pattern or a state machine library like transitions. Define states: WORKING, REVIEW_TRIGGERED, REVIEWING, FIX_REQUIRED, FIXING, VERIFICATION, COMPLETE, ERROR. Implement transition guards to prevent invalid state changes and add state persistence for recovery. Include event logging for all state transitions and integrate with the JSON stream monitor for automatic state updates.",
-        "testStrategy": "Unit tests for all state transitions, test invalid transition handling, verify state persistence and recovery, integration tests with orchestrator",
+        "title": "Create retry behavior configuration section",
+        "description": "Add comprehensive retry_behavior section to config.yaml with configurable settings for max_retries, backoff strategy, and delays",
+        "details": "Design and implement a comprehensive retry_behavior configuration section in config.yaml. Include settings for max_retries, backoff_strategy (linear/exponential), base_delay, max_delay, and component-specific overrides. Structure the configuration to allow different retry behaviors for different components (JSON parsing, MCP calls, file operations). Add schema validation and documentation comments in the YAML file.",
+        "testStrategy": "Validate YAML syntax and structure. Test configuration loading with various retry scenarios. Verify that different components can access their specific retry configurations. Test with invalid configuration values to ensure proper error handling.",
         "priority": "high",
         "dependencies": [
-          "12"
+          1
         ],
         "status": "done",
         "subtasks": []
       },
       {
         "id": 3,
-        "title": "Build ReviewTriggerDetector Class",
-        "description": "Create a detector system to identify when code reviews should be triggered based on output patterns",
-        "status": "done",
-        "dependencies": [
-          "17"
-        ],
+        "title": "Implement retry delays in retry_utils.py",
+        "description": "Add time.sleep() delays with configurable backoff strategy to prevent retry storms",
+        "details": "Enhance retry_utils.py to implement configurable delay mechanisms between retry attempts. Add linear backoff (2 * attempt seconds) as default with support for exponential backoff. Read delay configuration from config.yaml retry_behavior section. Implement maximum delay caps to prevent excessive wait times. Add logging for retry delays to improve debugging visibility.",
+        "testStrategy": "Test retry delays with different backoff strategies. Verify that delays scale appropriately with attempt numbers. Test maximum delay caps. Measure actual delay times to ensure accuracy. Test with zero delay configuration for fast testing scenarios.",
         "priority": "high",
-        "details": "Implement ReviewTriggerDetector as the primary entry point for the entire Claude Cadence workflow - this is a foundation component that enables the automated review system. Create configurable trigger patterns: zen_mcp_codereview calls, TASK_COMPLETE markers, CODE_CHANGES_DONE signals. Use regex patterns and JSON path expressions to match triggers in streaming output. Support configuration-driven trigger rules from config.yaml. Include context extraction to gather relevant information (modified files, task IDs) when triggers fire. This component serves as the critical foundation that enables all downstream review and supervision functionality.",
-        "testStrategy": "Unit tests for each trigger type, test trigger pattern matching, verify context extraction accuracy, test configuration loading, integration tests to ensure it properly serves as workflow entry point",
+        "dependencies": [
+          2
+        ],
+        "status": "done",
         "subtasks": []
       },
       {
         "id": 4,
-        "title": "Implement Agent Dispatch Messaging Protocol",
-        "description": "Create a standardized messaging system for dispatching and communicating with review and fix agents using the JSON protocol defined in PRD lines 58-82",
+        "title": "Add type annotation for retry_callback",
+        "description": "Add proper type hints for retry_callback parameter in retry_utils.py to improve code clarity and IDE support",
+        "details": "Add comprehensive type annotations to retry_utils.py, specifically for the retry_callback parameter. Define the type as Optional[Callable[[str, int], str]] where the callback receives error message and attempt number, returning a modified message. Import necessary typing modules (Optional, Callable). Ensure all function signatures in retry_utils.py have proper type hints for better code maintainability.",
+        "testStrategy": "Run mypy or similar type checker to validate type annotations. Test with various callback functions to ensure type compatibility. Verify IDE auto-completion and type checking work correctly. Test with None callback to ensure Optional handling works.",
+        "priority": "medium",
+        "dependencies": [
+          3
+        ],
         "status": "done",
-        "dependencies": [],
-        "priority": "high",
-        "details": "Design and implement an AgentDispatcher class with the specific JSON-based messaging protocol outlined in the PRD. Implement the exact message structure with required fields: message_type (string), agent_type (string - 'review' or 'fix'), context (object containing task_id, parent_session, files_modified, project_path), success_criteria (object with expected_outcomes array and validation_steps array), and callback (object with handler and timeout_ms). Include message types: DISPATCH_AGENT, AGENT_RESPONSE, TASK_COMPLETE, ERROR. Implement asynchronous message queuing and response handling with the specified callback mechanism. Add timeout management using the timeout_ms field and error recovery mechanisms that conform to the protocol specification.",
-        "testStrategy": "Unit tests for JSON message serialization/deserialization against PRD schema, test async message handling with callback objects, verify timeout behavior using timeout_ms field, test all message_type variants, validate context object structure, test success_criteria validation, integration tests with mock agents using the exact protocol format",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Create Basic Message Data Classes",
-            "description": "Define the core message structure and data classes for the JSON-based messaging protocol",
-            "dependencies": [],
-            "details": "Create Python dataclasses or Pydantic models for the message structure including: message_type, agent_type, context (with task_id, parent_session, files_modified, project_path), success_criteria (with expected_outcomes and validation_steps arrays), and callback (with handler and timeout_ms). Define message type constants: DISPATCH_AGENT, AGENT_RESPONSE, TASK_COMPLETE, ERROR.\n<info added on 2025-06-27T02:19:31.523Z>\nTask completed successfully. Implemented agent_messages.py with Python dataclasses containing all required message structure components. Created MessageType and AgentType enums, MessageContext dataclass with task_id/parent_session/files_modified/project_path fields, SuccessCriteria dataclass with expected_outcomes and validation_steps arrays, CallbackInfo dataclass with handler and timeout_ms, and main AgentMessage dataclass with serialization methods. Added comprehensive unit test coverage with 6 passing tests. Implementation is clean and follows Python best practices with approximately 100 lines of code.\n</info added on 2025-06-27T02:19:31.523Z>",
-            "status": "done",
-            "testStrategy": "Unit tests for message serialization/deserialization and validation of required fields"
-          },
-          {
-            "id": 2,
-            "title": "Implement Basic AgentDispatcher Class",
-            "description": "Create the core AgentDispatcher class with methods for sending and receiving messages",
-            "dependencies": [
-              1
-            ],
-            "details": "Implement AgentDispatcher class with basic methods: dispatch_agent() to send DISPATCH_AGENT messages, receive_response() to handle AGENT_RESPONSE messages, and simple JSON serialization/deserialization. Include basic message validation using the data classes from subtask 1.\n<info added on 2025-06-27T02:21:30.520Z>\nImplementation completed successfully. Created cadence/agent_dispatcher.py with a simple AgentDispatcher class featuring pending_messages and callbacks dictionaries for tracking dispatched agents. Key methods include dispatch_agent() for sending DISPATCH_AGENT messages, receive_response() for handling AGENT_RESPONSE messages, and create_error_response() for error handling. Added automatic message ID generation and callback storage mechanism. Developed comprehensive test suite with 6 unit tests covering dispatch, response handling, error scenarios, and message validation - all tests passing. Total implementation is approximately 130 lines of clean, maintainable code following KISS principle with synchronous operation and basic JSON serialization.\n</info added on 2025-06-27T02:21:30.520Z>",
-            "status": "done",
-            "testStrategy": "Unit tests for message dispatch and response handling with mock agents"
-          },
-          {
-            "id": 3,
-            "title": "Add Simple Message Queue",
-            "description": "Implement basic in-memory message queuing for handling multiple agent communications",
-            "dependencies": [
-              2
-            ],
-            "details": "Add a simple queue.Queue or collections.deque to store outgoing and incoming messages. Implement basic methods: queue_message(), get_next_message(), and process_queue(). Keep it simple with synchronous processing initially.\n<info added on 2025-06-27T02:23:24.125Z>\nCompleted implementation of message queuing system with 60 lines of code added to agent_dispatcher.py. Implementation includes two separate Queue objects for managing outgoing messages and incoming responses, basic queue management methods (queue_message, get_next_message, queue_response, get_next_response), a process_queue method for batch processing, and integration with existing dispatch_agent method via use_queue parameter. Added comprehensive test coverage with 4 unit tests validating all queue operations. Used Python's built-in queue.Queue for thread-safe operations while maintaining synchronous processing as specified.\n</info added on 2025-06-27T02:23:24.125Z>",
-            "status": "done",
-            "testStrategy": "Tests for queuing multiple messages and processing them in order"
-          },
-          {
-            "id": 4,
-            "title": "Implement Basic Timeout Handling",
-            "description": "Add simple timeout management using the timeout_ms field from message callbacks",
-            "dependencies": [
-              3
-            ],
-            "details": "Implement basic timeout handling using threading.Timer or asyncio.wait_for. When a message is dispatched, start a timer based on the callback.timeout_ms field. If no response is received within the timeout, generate an ERROR message. Keep error handling minimal - just log timeouts and mark tasks as failed.\n<info added on 2025-06-27T02:26:39.649Z>\nImplementation completed successfully. Added timeout handling infrastructure to agent_dispatcher.py with timer tracking dictionary, _start_timeout_timer() and _cancel_timeout_timer() methods, automatic error response generation on timeout, cleanup() method for pending timers, integration with dispatch_agent and receive_response methods, and 3 comprehensive unit tests covering timeout scenarios. Total implementation: ~45 lines of clean code using Python's threading.Timer for simplicity and reliability.\n</info added on 2025-06-27T02:26:39.649Z>",
-            "status": "done",
-            "testStrategy": "Tests for timeout scenarios with delayed mock responses"
-          },
-          {
-            "id": 5,
-            "title": "Add Basic Response Routing",
-            "description": "Implement simple callback mechanism to route responses back to the requesting code",
-            "dependencies": [
-              4
-            ],
-            "details": "Create a simple callback registry that maps message IDs to callback handlers. When AGENT_RESPONSE or TASK_COMPLETE messages are received, look up the corresponding callback from the registry and invoke it. Implement basic error propagation for ERROR messages. Keep the callback mechanism simple - just direct function calls.\n<info added on 2025-06-27T02:28:29.182Z>\nResponse routing implementation completed successfully during subtask 4.2 development. Integration testing confirms full functionality:\n\n- Created comprehensive test suite with 4 passing integration tests\n- Verified complete message flow: dispatch → response → callback execution\n- Confirmed error message propagation works correctly\n- Validated TASK_COMPLETE message handling\n- Tested queued message processing with proper callback invocation\n\nImplementation details: Callback registry uses simple dictionary mapping message_id to callback functions. When AGENT_RESPONSE, ERROR, or TASK_COMPLETE messages arrive, dispatcher looks up callback by message_id and invokes directly. No additional implementation required - core functionality was already working from previous subtask.\n</info added on 2025-06-27T02:28:29.182Z>",
-            "status": "done",
-            "testStrategy": "Integration tests for complete message dispatch -> agent response -> callback flow"
-          }
-        ]
+        "subtasks": []
       },
       {
         "id": 5,
-        "title": "Develop Code Review Agent Wrapper",
-        "description": "Create a wrapper around zen MCP code review functionality for controlled execution",
-        "details": "Build CodeReviewAgent class that wraps zen MCP codereview tool calls. Support multiple models (o3, gemini-2.5-pro) with fallback logic. Implement structured configuration for review parameters (severity_threshold, focus_areas). Add context management for file changes and task information. Include proper error handling and retry logic for MCP tool failures.",
-        "testStrategy": "Unit tests for MCP tool integration, test multi-model fallback, verify configuration handling, integration tests with real code files",
+        "title": "Complete error logging in code_review_agent.py",
+        "description": "Enhance error logging to include actual JSON parsing error details instead of generic messages",
+        "details": "Locate the generic error logging at line 340 in code_review_agent.py and enhance it to include the actual JSON parsing error details. Modify the log message to include the original exception message, the problematic JSON content (truncated if necessary), and the attempt number. Add structured logging with appropriate log levels (ERROR for final failures, WARNING for retry attempts). Ensure sensitive information is not logged.",
+        "testStrategy": "Trigger JSON parsing errors intentionally and verify detailed error messages are logged. Test with various types of malformed JSON to ensure comprehensive error reporting. Verify log messages are helpful for debugging without exposing sensitive data.",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Improve TypeError handling in save_json_with_retry",
+        "description": "Fix ineffective TypeError retry logic in save_json_with_retry by adding proper handling for non-serializable data",
+        "details": "Analyze the TypeError retry logic in save_json_with_retry function. Since TypeError typically indicates non-serializable data that won't be fixed by retry, implement proper data sanitization or conversion before retrying. Add specific handling for common non-serializable types (datetime, custom objects, etc.). Consider using a custom JSON encoder or data preprocessing step. If the data truly cannot be serialized, fail fast instead of ineffective retries.",
+        "testStrategy": "Test with various non-serializable data types (datetime, custom objects, functions). Verify that data sanitization works correctly. Test retry behavior with temporary vs permanent serialization issues. Ensure the function fails gracefully for truly non-serializable data.",
         "priority": "medium",
         "dependencies": [
           4
@@ -163,242 +76,49 @@
         "subtasks": []
       },
       {
-        "id": 6,
-        "title": "Create Review Result Parser",
-        "description": "Implement a comprehensive processor to extract structured issue data from code review output and categorize issues by severity to determine required actions",
-        "status": "done",
+        "id": 7,
+        "title": "Clean up ineffective retry call in code_review_agent.py",
+        "description": "Remove parse_json_with_retry call at line 317 since MCP responses don't need retry and replace with proper error handling",
+        "details": "Remove the parse_json_with_retry call at line 317 in code_review_agent.py since MCP (Model Context Protocol) responses are typically reliable and don't benefit from JSON parsing retries. Replace with a simple json.loads() call wrapped in proper try-catch error handling. Add specific error messages for JSON parsing failures that indicate the source of the problem. Ensure the error handling is appropriate for the MCP response context.",
+        "testStrategy": "Test MCP response parsing with valid JSON responses. Test error handling with malformed MCP responses. Verify that removal of retry logic doesn't negatively impact functionality. Confirm error messages are clear and actionable.",
+        "priority": "medium",
         "dependencies": [
           5
         ],
-        "priority": "medium",
-        "details": "Develop ReviewResultProcessor class that combines parsing and classification functionality. Parse unstructured review output into structured issue objects, extracting severity levels (critical, high, medium, low), issue descriptions, file locations, and suggested fixes. Use NLP techniques or regex patterns to identify issue patterns. Create standardized issue schema with fields: severity, description, file_path, line_number, category, suggested_fix. Additionally, implement severity-based categorization logic to determine required actions (e.g., immediate blocking for critical issues, warnings for medium issues). This consolidates parsing and classification into a single comprehensive component.",
-        "testStrategy": "Unit tests with sample review outputs, test severity classification accuracy, verify structured data extraction, test categorization logic for different severity levels, validate action determination based on issue severity, test edge cases and malformed output, verify end-to-end processing pipeline",
+        "status": "done",
         "subtasks": []
       },
       {
         "id": 8,
-        "title": "Implement Fix Agent Dispatch Logic",
-        "description": "Create the logic to dispatch fix agents when critical or high-priority issues are identified",
-        "details": "Develop FixAgentDispatcher that creates and manages fix agents for addressing code review issues. Include context preservation (passing review findings and file context), scope validation to prevent scope creep, and iteration limits (max 3 attempts). Implement fix verification by re-running targeted reviews after fixes. Add proper error handling and escalation when fixes fail.",
-        "testStrategy": "Unit tests for dispatch logic, test scope validation, verify iteration limits, integration tests with fix scenarios, test error escalation",
-        "priority": "high",
-        "dependencies": [],
+        "title": "Refactor duplicate retry logic in orchestrator.py",
+        "description": "Consolidate duplicate retry logic in run_supervisor_analysis and run_fix_agent methods using the enhanced retry utilities",
+        "details": "Identify and extract the common retry patterns from run_supervisor_analysis and run_fix_agent methods in orchestrator.py. Create reusable helper functions or utilize the enhanced retry_utils.py functions to eliminate code duplication. Maintain the existing functionality while reducing code complexity. Since this was previously marked as 'hobby-level', implement only if it provides clear maintainability benefits without over-engineering.",
+        "testStrategy": "Verify that both run_supervisor_analysis and run_fix_agent methods maintain identical behavior after refactoring. Test various failure scenarios to ensure retry logic works consistently. Compare execution times and behavior before and after refactoring.",
+        "priority": "low",
+        "dependencies": [
+          6
+        ],
         "status": "done",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Create FixAgentDispatcher Core Class",
-            "description": "Implement the main FixAgentDispatcher class with basic structure and initialization",
-            "dependencies": [],
-            "details": "Create FixAgentDispatcher class in cadence/fix_agent_dispatcher.py with __init__ method, class properties for tracking active agents, iteration limits (max 3), and configuration parameters. Include logging setup and basic error handling framework.",
-            "status": "done",
-            "testStrategy": "Unit tests for class initialization, configuration validation, and basic property access"
-          },
-          {
-            "id": 2,
-            "title": "Implement Issue Triage and Agent Creation Logic",
-            "description": "Add logic to analyze code review findings and determine when to create fix agents",
-            "dependencies": [
-              1
-            ],
-            "details": "Implement should_dispatch_fix_agent() method that evaluates issue severity (critical/high), issue type classification, and scope validation. Create create_fix_agent() method that instantiates appropriate fix agents with proper context (review findings, file paths, issue details).",
-            "status": "done",
-            "testStrategy": "Unit tests with mock code review findings covering different severity levels and issue types"
-          },
-          {
-            "id": 3,
-            "title": "Add Context Preservation and Scope Management",
-            "description": "Implement context passing and scope validation to prevent scope creep",
-            "dependencies": [
-              2
-            ],
-            "details": "Create FixContext class to encapsulate review findings, file context, and issue metadata. Implement scope validation logic to ensure fixes stay within identified file boundaries. Add context serialization/deserialization for agent communication.",
-            "status": "done",
-            "testStrategy": "Integration tests verifying context integrity and scope boundary enforcement"
-          },
-          {
-            "id": 4,
-            "title": "Implement Fix Iteration Management and Limits",
-            "description": "Add iteration tracking and limits to prevent infinite fix attempts",
-            "dependencies": [
-              2
-            ],
-            "details": "Implement iteration counter per issue, max attempt limits (3), and retry logic with exponential backoff. Add attempt history tracking and failure pattern analysis. Include early termination conditions for repeated failures.",
-            "status": "done",
-            "testStrategy": "Unit tests for iteration limits, retry logic, and failure scenarios with mock fix agents"
-          },
-          {
-            "id": 5,
-            "title": "Add Fix Verification and Error Handling",
-            "description": "Implement fix verification by re-running reviews and comprehensive error handling",
-            "dependencies": [
-              3,
-              4
-            ],
-            "details": "Create verify_fix() method that re-runs targeted code reviews on modified files. Implement escalation logic for failed fixes (logging, notifications, fallback strategies). Add comprehensive error handling for agent failures, timeout scenarios, and resource constraints.",
-            "status": "done",
-            "testStrategy": "End-to-end integration tests with real code review scenarios and mock fix verification"
-          },
-          {
-            "id": 6,
-            "title": "Run Comprehensive Code Review",
-            "description": "Perform thorough code review of all Fix Agent Dispatcher implementation using Zen and Gemini 2.5 Pro",
-            "details": "Run comprehensive code review using zen code review tool with Gemini 2.5 Pro model. Review all implementation files, tests, and integration points. Focus on security, thread safety, error handling, and architectural design. Ensure proper context preservation and scope management.",
-            "status": "done",
-            "dependencies": [
-              5
-            ],
-            "parentTaskId": 8
-          }
-        ]
+        "subtasks": []
       },
       {
         "id": 9,
-        "title": "Develop Scope Creep Detection",
-        "description": "Implement validation to ensure fixes don't exceed original task boundaries",
-        "details": "Create ScopeValidator class to check that fix actions stay within task boundaries. Define scope limits: max_file_changes (10), max_line_changes (500), allowed file patterns. Compare fix proposals against original task scope and modified files. Implement diff analysis to measure change magnitude. Add configuration options for scope limits and validation rules.",
-        "testStrategy": "Unit tests for scope validation rules, test change magnitude calculation, verify file pattern matching, test configuration handling",
-        "priority": "medium",
+        "title": "Execute final code review with gemini-2.5-pro",
+        "description": "Run comprehensive code review after all fixes are complete to validate issue resolution and identify any new problems",
+        "details": "Set up and execute a comprehensive code review using gemini-2.5-pro on the modified codebase. Focus on the retry implementation, error handling, and configuration management changes. Create a systematic review checklist based on the original issues identified. Document the review process and results. Verify that all original issues have been properly addressed and no new issues were introduced. Generate a final report comparing before and after states.",
+        "testStrategy": "Compare the final code review results with the original issue list. Verify that all identified problems have been resolved. Test the overall system functionality to ensure no regressions were introduced. Document any remaining issues or recommendations for future improvements.",
+        "priority": "high",
         "dependencies": [
+          7,
           8
         ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 10,
-        "title": "Create Fix Verification Workflow",
-        "description": "Implement a workflow to verify that applied fixes actually resolve the identified issues",
-        "details": "Build FixVerificationWorkflow that re-runs targeted code reviews after fixes are applied. Compare before/after issue lists to verify resolution. Implement partial verification for specific issues rather than full re-review. Add regression detection to ensure fixes don't introduce new issues. Include verification reporting and fix success metrics.",
-        "testStrategy": "Unit tests for verification logic, test issue resolution detection, verify regression checking, integration tests with fix scenarios",
-        "priority": "medium",
-        "dependencies": [
-          9
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 11,
-        "title": "Extend Orchestrator with Dispatch Integration",
-        "description": "Integrate the dispatch system components into the existing orchestrator architecture",
-        "details": "Modify the existing orchestrator (cadence/orchestrator.py) to integrate JSON stream monitoring, state machine, and agent dispatch. Add new workflow hooks for code review triggers. Implement the dispatch controller that manages agent lifecycle and communication. Ensure backward compatibility with existing orchestrator functionality and add configuration options for enabling/disabling the dispatch system.",
-        "testStrategy": "Integration tests with existing orchestrator, test backward compatibility, verify configuration handling, test workflow integration, end-to-end testing",
-        "priority": "high",
-        "dependencies": [
-          10
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 12,
-        "title": "Implement Configuration System",
-        "description": "Create comprehensive configuration management for the code review dispatch system as a foundational component to avoid hardcoding values throughout the system",
-        "status": "done",
-        "dependencies": [
-          "1"
-        ],
-        "priority": "high",
-        "details": "The fix_agent_dispatcher configuration has been successfully added to config.yaml with all necessary settings including enabled flag, severity_threshold, max_fix_iterations, timeout_seconds, model selections, and circular dependency detection. Need to verify if there's a separate code_review_dispatch system that requires additional configuration or if the existing fix_agent_dispatcher configuration fulfills all requirements. Update configuration loading in cadence/orchestrator.py has been implemented. This foundational component prevents hardcoded values from being scattered throughout the codebase.",
-        "testStrategy": "Unit tests for configuration loading, test validation rules, verify default values, test configuration override behavior, test integration with fix_agent_dispatcher system",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Verify configuration completeness and determine task status",
-            "description": "Check if fix_agent_dispatcher configuration covers all code_review_dispatch requirements or if additional configuration is needed",
-            "status": "done",
-            "dependencies": [],
-            "details": "Review the implemented fix_agent_dispatcher configuration in config.yaml to confirm it includes all required settings: enabled flag, triggers/severity thresholds, max iterations, timeouts, model selections, and scope checking. Determine if 'code_review_dispatch' refers to a separate system or if it's the same as fix_agent_dispatcher. If they're the same system, mark parent task as complete.",
-            "testStrategy": ""
-          }
-        ]
-      },
-      {
-        "id": 13,
-        "title": "Add Comprehensive Logging and Monitoring",
-        "description": "Implement robust logging system for tracking dispatch system operations and debugging",
-        "details": "Enhance logging throughout the dispatch system with structured logging using Python's logging module. Add log levels for different operation types: trigger detection, agent dispatch, review parsing, fix application, verification. Include performance metrics logging and error tracking. Create log correlation IDs for tracking operations across agent lifecycle. Add debug logging for troubleshooting.",
-        "testStrategy": "Unit tests for logging functionality, verify log structure and correlation IDs, test log level filtering, integration tests for end-to-end logging",
-        "priority": "medium",
-        "dependencies": [
-          12
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 14,
-        "title": "Create Unit Test Suite",
-        "description": "Develop comprehensive unit tests for all dispatch system components",
-        "details": "Create unit tests using pytest for all new classes and methods: JSONStreamMonitor, WorkflowStateMachine, ReviewTriggerDetector, AgentDispatcher, CodeReviewAgent, ReviewResultParser, IssueSeverityClassifier, FixAgentDispatcher, ScopeValidator, FixVerificationWorkflow. Include mock objects for external dependencies and test edge cases, error conditions, and boundary values. Aim for >90% code coverage.",
-        "testStrategy": "Verify test coverage with pytest-cov, test all error conditions, validate mock usage, ensure tests are isolated and deterministic",
-        "priority": "medium",
-        "dependencies": [
-          13
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 15,
-        "title": "Implement Integration Tests",
-        "description": "Create end-to-end integration tests for the complete code review dispatch workflow",
-        "details": "Develop integration tests that exercise the complete workflow from trigger detection through fix verification. Create test scenarios with realistic code files containing various types of issues. Test multi-agent coordination, state transitions, and error recovery. Include performance tests for stream processing and timeout handling. Test configuration variations and edge cases.",
-        "testStrategy": "End-to-end workflow testing, performance benchmarking, error recovery validation, test multiple configuration scenarios",
-        "priority": "medium",
-        "dependencies": [
-          14
-        ],
         "status": "in-progress",
-        "subtasks": []
-      },
-      {
-        "id": 16,
-        "title": "Define and Validate JSON Dispatch Schema",
-        "description": "Implement the exact JSON protocol structure from PRD lines 58-81 with schema validation logic for agent communication messages",
-        "details": "Create a comprehensive JSON schema definition based on PRD specifications for agent dispatch communication protocol. Implement AgentMessageSchema class with validation for all message types: DISPATCH_AGENT, AGENT_RESPONSE, TASK_COMPLETE, ERROR, REVIEW_TRIGGERED, FIX_REQUIRED. Define strict field requirements including task_id (string), agent_type (enum), priority (enum: critical|high|medium|low), context (object with file_paths, modifications, scope), timestamp (ISO string), and session_id (UUID). Implement JSON schema validation using jsonschema library with custom validators for business rules. Add message serialization/deserialization helpers with proper error handling. Create schema versioning support for backward compatibility. Include field sanitization and security validation to prevent injection attacks.",
-        "testStrategy": "Unit tests for schema validation with valid and invalid message examples, test all message type variations, verify field requirement enforcement, test custom business rule validators, validate serialization round-trip accuracy, test schema versioning compatibility, security tests for injection prevention, performance tests for validation speed",
-        "status": "done",
-        "dependencies": [
-          4,
-          "3"
-        ],
-        "priority": "high",
-        "subtasks": []
-      },
-      {
-        "id": 17,
-        "title": "Implement Agent Communication Handler",
-        "description": "Create callback mechanisms (on_complete, on_error) and timeout watchdog for asynchronous agent operations",
-        "details": "Develop an AgentCommunicationHandler class that manages asynchronous agent lifecycle events. Implement callback system with on_complete(agent_id, result), on_error(agent_id, error, context), and on_timeout(agent_id, duration) methods. Create a timeout watchdog using asyncio.wait_for() with 300-second default timeout that monitors agent operations and triggers callbacks appropriately. Include callback registration/deregistration, event queuing for high-throughput scenarios, and proper exception handling. Integrate with the existing AgentDispatcher from Task 4 to provide seamless communication flow. Add callback chaining support for complex workflows and ensure thread-safety for concurrent agent operations. Implement graceful shutdown handling to clean up pending operations.",
-        "testStrategy": "Unit tests for callback registration and invocation, test timeout watchdog with mock agents that exceed 300 seconds, verify callback exception handling doesn't break the system, test concurrent callback execution, integration tests with AgentDispatcher message flow, test graceful shutdown with pending operations, performance tests for high-frequency callback scenarios",
-        "status": "done",
-        "dependencies": [
-          4,
-          "2"
-        ],
-        "priority": "high",
-        "subtasks": []
-      },
-      {
-        "id": 18,
-        "title": "Implement Fix Iteration Limit and Escalation Handler",
-        "description": "Track fix attempts per issue, enforce maximum 3 fix attempts, and trigger escalation workflow when limit is exceeded",
-        "details": "Create a FixIterationTracker class that maintains state for each fix attempt across the workflow. Implement attempt counting with persistent storage using task_id as the key, incrementing on each fix cycle start. Add FixAttemptLimitEnforcer that checks current attempt count against configurable max_fix_iterations (default 3) before allowing new fix attempts. When limit is exceeded, trigger EscalationHandler that can: log escalation events, notify supervisors via callback system, mark tasks for manual review, or pause automated fixing. Include attempt reset logic for successful fixes and proper cleanup. Integrate with AgentDispatcher messaging protocol to include attempt_count in DISPATCH_AGENT messages and handle ESCALATION_REQUIRED message type. Add configuration options for escalation strategies (log_only, notify_supervisor, pause_automation) and attempt count persistence (memory, file, database).",
-        "testStrategy": "Unit tests for attempt counting accuracy across multiple fix cycles, test limit enforcement blocks further attempts when exceeded, verify escalation trigger conditions and handler invocation, test attempt reset on successful fixes, test persistence of attempt counts across system restarts, integration tests with AgentDispatcher for message flow including attempt metadata, test various escalation strategies (logging, notification, pausing), verify proper cleanup and memory management, test concurrent fix attempts for different tasks, edge case testing for malformed task IDs and recovery scenarios",
-        "status": "done",
-        "dependencies": [
-          4,
-          17
-        ],
-        "priority": "high",
         "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-06-21T22:40:58.616Z",
-      "updated": "2025-06-27T22:39:55.468Z",
+      "updated": "2025-06-28T23:27:05.853Z",
       "description": "Tasks for master context"
     }
   }

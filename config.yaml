@@ -289,6 +289,8 @@ fix_agent_dispatcher:
   enable_verification: true
   # Timeout for verification (milliseconds)
   verification_timeout_ms: 60000  # 1 minute
+  # Maximum turns for fix agent execution
+  max_turns: 30
   # Validation constants for timeout values
   validation:
     # Minimum timeout value in milliseconds (100ms for testing flexibility)
@@ -325,3 +327,22 @@ orchestration:
   session_timeout: 300
   # Number of sessions to keep during cleanup - moved from OrchestratorDefaults
   cleanup_keep_sessions: 5
+
+# Retry behavior configuration
+retry_behavior:
+  # Maximum number of JSON parsing retries
+  max_json_retries: 3
+  # Retry strategy: "linear" or "exponential"
+  backoff_strategy: "linear"
+  # Base delay in seconds between retries
+  base_delay: 2
+  # Maximum delay in seconds (for exponential backoff)
+  max_delay: 60
+  # Whether to use --continue flag on JSON parsing failures
+  use_continue_on_failure: true
+  # Timeout for subprocess retries (seconds)
+  subprocess_timeout: 300
+  # Maximum retries for file operations
+  max_file_retries: 3
+  # Enable detailed retry logging
+  verbose_logging: false

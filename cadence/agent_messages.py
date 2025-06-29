@@ -9,6 +9,13 @@ from typing import List, Dict, Any, Optional, Union
 from enum import Enum
 from datetime import datetime
 
+try:
+    import jsonschema
+except ImportError:
+    jsonschema = None
+
+from .config import MAX_TIMEOUT_MS
+
 
 class MessageType(str, Enum):
     """Message type constants"""
@@ -293,7 +300,7 @@ class AgentMessageSchema:
                     "timeout_ms": {
                         "type": "integer",
                         "minimum": 1000,
-                        "maximum": 600000  # Max 10 minutes
+                        "maximum": MAX_TIMEOUT_MS  # Max timeout from config
                     }
                 },
                 "additionalProperties": False
@@ -320,10 +327,8 @@ class AgentMessageSchema:
             ValueError: If validation fails
         """
         try:
-            # Install jsonschema if not available
-            try:
-                import jsonschema
-            except ImportError:
+            # Check if jsonschema is available (imported at module level)
+            if jsonschema is None:
                 raise ImportError("jsonschema library is required for validation. Install with: pip install jsonschema")
 
             # Basic schema validation
@@ -345,7 +350,8 @@ class AgentMessageSchema:
     @classmethod
     def _sanitize_message(cls, data: Dict[str, Any]) -> Dict[str, Any]:
         """Sanitize message data to prevent injection attacks"""
-        sanitized = data.copy()
+        import copy
+        sanitized = copy.deepcopy(data)  # Deep copy to prevent nested mutations
 
         # Sanitize string fields to prevent injection - FIXED: Use correct nested paths
         string_fields = ["context.task_id", "context.parent_session", "context.project_path", "callback.handler"]

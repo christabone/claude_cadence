@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Callable, Tuple
 from datetime import datetime, timedelta
 
-from .agent_messages import AgentMessage, MessageType, AgentType, Priority
+from .agent_messages import AgentMessage, MessageType, AgentType, Priority, MessageContext, SuccessCriteria
 from .enhanced_agent_dispatcher import EnhancedAgentDispatcher, DispatchConfig
 from .config import FixAgentDispatcherConfig
 from .fix_iteration_tracker import EscalationStrategy, PersistenceType
@@ -80,8 +80,23 @@ class FixAgentDispatcher(EnhancedAgentDispatcher):
         """
         Initialize the FixAgentDispatcher.
 
+        This dispatcher extends EnhancedAgentDispatcher to provide specialized fix agent
+        functionality with context preservation, circular dependency detection, and
+        verification workflow integration.
+
+        Architecture:
+        - Inherits fix iteration tracking from EnhancedAgentDispatcher
+        - Adds issue-specific context management and retry scheduling
+        - Provides verification workflow hooks for completed fixes
+        - Implements circular dependency detection to prevent infinite retry loops
+
         Args:
             config: Configuration object for the dispatcher. If None, uses defaults.
+                   Contains timeout settings, attempt limits, verification options,
+                   and circular dependency detection parameters.
+
+        Raises:
+            ValueError: If config validation fails (invalid timeouts, attempt limits, etc.)
         """
         if config is None:
             config = FixAgentDispatcherConfig()
@@ -277,18 +292,40 @@ class FixAgentDispatcher(EnhancedAgentDispatcher):
         # Default to the provided type or "general"
         return issue.issue_type or "general"
 
-    def dispatch_fix_agent(self, issue: IssueContext, callback: Optional[Callable] = None) -> Optional[str]:
+    def dispatch_fix_for_issue(self, issue: IssueContext, callback: Optional[Callable] = None) -> Optional[str]:
         """
         Dispatch a fix agent for the given issue.
 
-        Overrides parent's dispatch_fix_agent to add issue-specific context.
+        This method provides issue-specific context for fix agents,
+        attempt tracking, and preservation of context between retry attempts.
+
+        Process:
+        1. Validates the fix request and checks dispatch eligibility
+        2. Classifies the issue type (security, performance, bug, etc.)
+        3. Creates a new FixAttempt and tracks it for this issue
+        4. Preserves context from previous attempts for better continuity
+        5. Builds MessageContext and SuccessCriteria dataclasses for parent dispatcher
+        6. Wraps the callback to handle fix-specific response processing
+        7. Dispatches through parent with proper timeout and priority
 
         Args:
-            issue: The issue context to fix
-            callback: Optional callback function
+            issue: The issue context to fix. Must include issue_id, file_path,
+                   description, and severity level.
+            callback: Optional callback function to be invoked when fix completes.
+                     Will be called with the AgentMessage response.
 
         Returns:
-            Message ID if dispatched, None otherwise
+            Message ID if dispatched successfully, None if:
+            - Auto-fix is disabled
+            - Issue severity below threshold
+            - Issue already being fixed or exceeded max attempts
+            - Validation fails (missing required fields)
+
+        Side Effects:
+            - Adds issue to active_fixes tracking
+            - Creates new FixAttempt entry in fix_history
+            - May schedule retries on failure
+            - Updates preserved context for the issue
         """
         if not self.should_dispatch_fix(issue):
             return None
@@ -321,28 +358,37 @@ class FixAgentDispatcher(EnhancedAgentDispatcher):
         # Get preserved context
         preserved_context = self.get_fix_context(issue.issue_id)
 
-        # Build context for the fix agent
-        context = {
-            "task_type": "fix_issue",
-            "issue_id": issue.issue_id,
-            "severity": issue.severity,
-            "issue_type": issue_type,
-            "description": issue.description,
-            "file_path": issue.file_path,
-            "line_numbers": issue.line_numbers,
-            "code_review_findings": issue.code_review_findings,
-            "suggested_fix": issue.suggested_fix,
-            "attempt_number": attempt.attempt_number,
-            "preserved_context": preserved_context
-        }
+        # Build context for the fix agent - create MessageContext object
+        context_obj = MessageContext(
+            task_id=issue.issue_id,
+            parent_session=f"fix-{issue.issue_id}-{attempt.attempt_number}",
+            files_modified=[],
+            project_path=str(Path(issue.file_path).parent) if issue.file_path else ".",
+            file_paths=[issue.file_path] if issue.file_path else [],
+            modifications={
+                "issue_type": issue_type,
+                "severity": issue.severity,
+                "line_numbers": issue.line_numbers,
+                "code_review_findings": issue.code_review_findings,
+                "suggested_fix": issue.suggested_fix,
+                "attempt_number": attempt.attempt_number,
+                "preserved_context": preserved_context
+            }
+        )
 
-        # Define success criteria
-        success_criteria = {
-            "type": "fix_complete",
-            "issue_resolved": True,
-            "no_new_issues": True,
-            "tests_pass": True
-        }
+        # Define success criteria - create SuccessCriteria object
+        success_criteria_obj = SuccessCriteria(
+            expected_outcomes=[
+                "Issue resolved",
+                "No new issues introduced",
+                "Tests pass"
+            ],
+            validation_steps=[
+                "Verify fix addresses the issue",
+                "Check for regression",
+                "Run relevant tests"
+            ]
+        )
 
         # Create wrapped callback
         def fix_callback(response: AgentMessage):
@@ -351,8 +397,8 @@ class FixAgentDispatcher(EnhancedAgentDispatcher):
         # Use parent's dispatch_fix_agent with our context
         message_id = super().dispatch_fix_agent(
             task_id=issue.issue_id,
-            context=context,
-            success_criteria=success_criteria,
+            context=context_obj,
+            success_criteria=success_criteria_obj,
             callback_handler=fix_callback,
             timeout_ms=self.timeout_ms,
             priority=self._get_priority_for_severity(issue.severity)
@@ -393,7 +439,8 @@ class FixAgentDispatcher(EnhancedAgentDispatcher):
             # Update attempt status
             attempt.end_time = datetime.now()
 
-            if response.metadata.get("success", False):
+            # Check success in payload (AgentMessage has no metadata field)
+            if response.payload and response.payload.get("success", False):
                 attempt.status = FixAttemptStatus.SUCCESS
                 self.active_fixes.pop(issue_id, None)
 
@@ -405,7 +452,8 @@ class FixAgentDispatcher(EnhancedAgentDispatcher):
                     self.on_fix_complete(issue_id, attempt)
             else:
                 attempt.status = FixAttemptStatus.FAILED
-                attempt.error_message = response.metadata.get("error", "Unknown error")
+                # Extract error from payload
+                attempt.error_message = response.payload.get("error", "Unknown error") if response.payload else "Unknown error"
 
                 # Check for circular dependencies
                 if self._has_circular_dependency(issue_id):
@@ -496,6 +544,7 @@ class FixAgentDispatcher(EnhancedAgentDispatcher):
 
             if delay > 0:
                 self.retry_timer = threading.Timer(delay, self._process_retries)
+                self.retry_timer.daemon = True
                 self.retry_timer.start()
             else:
                 self._process_retries()
@@ -510,7 +559,7 @@ class FixAgentDispatcher(EnhancedAgentDispatcher):
                 self.active_fixes.pop(issue.issue_id, None)  # Remove from active
 
                 # Dispatch the retry
-                self.dispatch_fix_agent(issue)
+                self.dispatch_fix_for_issue(issue)
 
             # Schedule next retry if any remain
             self._schedule_next_retry()

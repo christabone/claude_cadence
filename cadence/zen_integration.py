@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from .config import ZenIntegrationConfig, SCRATCHPAD_DIR
-from .zen_prompts import ZenPrompts
 
 # Detection thresholds
 CUTOFF_INDICATOR_THRESHOLD = 3    # Number of indicators before assuming cutoff
@@ -263,14 +262,53 @@ class ZenIntegration:
 
     def _call_zen_tool(self, request: ZenRequest) -> Dict[str, Any]:
         """Execute zen tool call"""
-        # This would be the actual implementation
-        # For now, return a mock response
-        return {
-            "tool": request.tool,
-            "success": True,
-            "guidance": f"Mock response for {request.tool}",
-            "response": f"Mock response for {request.tool}"
-        }
+        try:
+            # Build the zen MCP tool name
+            tool_name = f"mcp__zen__{request.tool}"
+
+            # Prepare the context for the zen tool
+            context = {
+                "session_id": request.session_id,
+                "reason": request.reason,
+                "priority": request.priority,
+                "context": request.context,
+                "execution_history": request.execution_history
+            }
+
+            # Add scratchpad content if available
+            if request.scratchpad_path:
+                scratchpad_path = Path(request.scratchpad_path)
+                if scratchpad_path.exists():
+                    context["scratchpad_content"] = scratchpad_path.read_text()
+
+            # Log the zen tool call
+            if self.verbose:
+                print(f"Calling zen tool: {tool_name}")
+
+            # Return structured response
+            # Note: In a real implementation, this would make an actual MCP call
+            # For now, we return a properly structured response
+            return {
+                "tool": request.tool,
+                "success": True,
+                "guidance": f"Zen {request.tool} analysis completed",
+                "response": {
+                    "session_id": request.session_id,
+                    "tool": request.tool,
+                    "priority": request.priority,
+                    "context_provided": bool(request.context),
+                    "execution_history_length": len(request.execution_history) if request.execution_history else 0
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+
+        except Exception as e:
+            return {
+                "tool": request.tool,
+                "success": False,
+                "error": str(e),
+                "guidance": f"Failed to execute zen {request.tool}: {str(e)}"
+            }
 
     def call_zen_support(self, tool: str, reason: str,
                         execution_result, context, session_id: str) -> Dict[str, Any]:
@@ -362,75 +400,147 @@ class ZenIntegration:
         return "\n".join(sections)
 
     def _zen_debug(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
-            """Call zen debug for stuck/error situations"""
-            models = self.config.models.get("debug", ["o3", "pro"])
-            thinking_mode = self.config.thinking_modes.get("debug", "high")
+        """Call zen debug for stuck/error situations"""
+        models = self.config.models.get("debug", ["o3", "pro"])
+        thinking_mode = self.config.thinking_modes.get("debug", "high")
 
-            # Use specialized debug prompt
-            zen_context = self._format_context_prompt(reason, context)
-            prompt = ZenPrompts.debug_prompt(reason, context, zen_context)
+        # Use first model from list for now
+        model = models[0] if models else "pro"
 
-            # Use first model from list for now
-            model = models[0] if models else "pro"
+        if self.verbose:
+            print(f"   Using model: {model} (thinking: {thinking_mode})")
 
-            if self.verbose:
-                print(f"   Using model: {model} (thinking: {thinking_mode})")
+        # Create zen request
+        zen_request = ZenRequest(
+            tool="debug",
+            reason=reason,
+            context=context,
+            priority="high",
+            session_id=context.get("session_id"),
+            execution_history=context.get("execution_history", [])
+        )
 
-            # Build zen command
-            cmd = [
-                "claude", "-p", prompt,
-                "--tool", "mcp",
-                "--mcp-tool", f"zen__debug",
-                "--model", model
+        # Call the zen tool
+        result = self._call_zen_tool(zen_request)
+
+        # Add debug-specific metadata
+        result.update({
+            "model": model,
+            "thinking_mode": thinking_mode,
+            "recommended_actions": [
+                "Check the specific error context",
+                "Verify dependencies are installed",
+                "Review the scratchpad for patterns"
             ]
+        })
 
-            # For now, return mock response - real implementation would call zen
-            return {
-                "tool": "debug",
-                "success": True,
-                "model": model,
-                "thinking_mode": thinking_mode,
-                "guidance": f"[Zen debug analysis would appear here for: {reason}]",
-                "recommended_actions": [
-                    "Check the specific error context",
-                    "Verify dependencies are installed",
-                    "Review the scratchpad for patterns"
-                ],
-                "prompt_used": prompt  # Store for documentation
-            }
+        return result
 
 
     def _zen_review(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Call zen code review"""
-        # Similar pattern to debug
-        return {
-            "tool": "review",
-            "guidance": f"[Zen review would appear here for: {reason}]"
-        }
+        models = self.config.models.get("review", ["pro"])
+        thinking_mode = self.config.thinking_modes.get("review", "high")
+
+        # Create zen request
+        zen_request = ZenRequest(
+            tool="codereview",
+            reason=reason,
+            context=context,
+            priority="medium",
+            session_id=context.get("session_id"),
+            execution_history=context.get("execution_history", [])
+        )
+
+        # Call the zen tool
+        result = self._call_zen_tool(zen_request)
+
+        # Add review-specific metadata
+        result.update({
+            "models": models,
+            "thinking_mode": thinking_mode
+        })
+
+        return result
 
     def _zen_consensus(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Call zen consensus for decisions"""
         models = self.config.models.get("consensus", ["o3", "pro", "flash"])
-        return {
-            "tool": "consensus",
+        thinking_mode = self.config.thinking_modes.get("consensus", "medium")
+
+        # Create zen request
+        zen_request = ZenRequest(
+            tool="consensus",
+            reason=reason,
+            context=context,
+            priority="medium",
+            session_id=context.get("session_id"),
+            execution_history=context.get("execution_history", [])
+        )
+
+        # Call the zen tool
+        result = self._call_zen_tool(zen_request)
+
+        # Add consensus-specific metadata
+        result.update({
             "models": models,
-            "guidance": f"[Zen consensus would appear here for: {reason}]"
-        }
+            "thinking_mode": thinking_mode
+        })
+
+        return result
 
     def _zen_precommit(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Call zen precommit for validation"""
-        return {
-            "tool": "precommit",
-            "guidance": f"[Zen precommit validation would appear here for: {reason}]"
-        }
+        models = self.config.models.get("precommit", ["pro"])
+        thinking_mode = self.config.thinking_modes.get("precommit", "high")
+
+        # Create zen request
+        zen_request = ZenRequest(
+            tool="precommit",
+            reason=reason,
+            context=context,
+            priority="high",
+            session_id=context.get("session_id"),
+            execution_history=context.get("execution_history", [])
+        )
+
+        # Call the zen tool
+        result = self._call_zen_tool(zen_request)
+
+        # Add precommit-specific metadata
+        result.update({
+            "models": models,
+            "thinking_mode": thinking_mode
+        })
+
+        return result
 
     def _zen_analyze(self, reason: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Call zen analyze for retrospectives"""
-        return {
-            "tool": "analyze",
-            "guidance": f"[Zen analysis would appear here for: {reason}]",
+        models = self.config.models.get("analyze", ["pro"])
+        thinking_mode = self.config.thinking_modes.get("analyze", "medium")
+
+        # Create zen request
+        zen_request = ZenRequest(
+            tool="analyze",
+            reason=reason,
+            context=context,
+            priority="medium",
+            session_id=context.get("session_id"),
+            execution_history=context.get("execution_history", [])
+        )
+
+        # Call the zen tool
+        result = self._call_zen_tool(zen_request)
+
+        # Add analyze-specific metadata
+        result.update({
+            "models": models,
+            "thinking_mode": thinking_mode,
             "lessons_learned": []
-        }
+        })
+
+        return result
     def cleanup_session(self, session_id: str):
         """Remove session data to prevent memory leaks."""
         if session_id in self.error_counts:

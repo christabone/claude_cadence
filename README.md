@@ -2,11 +2,19 @@
 
 A task-driven supervision system for Claude Code agent execution. Manages agent execution through Task Master integration, with agents working on TODOs until completion.
 
-**Status: Core implementation complete. Currently in testing phase.**
+**Status: Core implementation complete. Major reorganization completed (2025-06-28). Currently in testing and optimization phase.**
 
 ## Overview
 
 Claude Cadence provides a framework for managing Claude Code agents through task-based execution. The supervisor uses Task Master to get and track tasks, then provides TODOs to agents who work until all tasks are complete or a maximum turn limit is reached.
+
+### Recent Improvements (2025-06-28)
+
+- **Configuration Consolidation**: Unified all configuration in `config.yaml`, removed duplicate constants.py
+- **Dispatcher Architecture**: Refactored FixAgentDispatcher to extend EnhancedAgentDispatcher for cleaner inheritance
+- **Code Quality**: Removed dead code, outdated documentation, and temporary test files
+- **Enhanced Type Safety**: Added UUID validation for message IDs, improved schema validation
+- **Testing**: Comprehensive test suite with fix iteration tracking and timeout handling
 
 ## Features
 
@@ -18,6 +26,13 @@ Claude Cadence provides a framework for managing Claude Code agents through task
 - **Flexible Configuration**: YAML-based configuration for all settings
 - **YAML-Based Prompts**: Unified prompt generation with Jinja2 conditional logic
 - **Intelligent Continuation**: Dynamic prompts adapt to execution state, retries, and completion status
+- **Advanced Dispatch System**:
+  - Three-tier dispatcher architecture (Base → Enhanced → Fix)
+  - Fix iteration tracking with configurable retry limits
+  - Circular dependency detection in fix attempts
+  - Issue classification and prioritization
+  - Exponential backoff retry scheduling
+  - Thread-safe message handling with timeout support
 - **Zen MCP Integration**: Intelligent assistance when agents need help
   - Automatic stuck detection and debugging support
   - Code review and validation for critical tasks
@@ -36,27 +51,26 @@ python scripts/check_mcp_servers.py
 
 ## Quick Start
 
-### Using the Orchestrator (Recommended)
+### Prerequisites
+
+- TaskMaster-AI must be installed and configured
+- `.taskmaster/` directory with initialized `tasks/tasks.json`
+- MCP server running with appropriate API keys
+
+### Using the Orchestrator (Only Method)
 
 ```bash
 # Run the orchestrator with a Task Master file
-python -m cadence.orchestrator /path/to/project /path/to/tasks.json
+python orchestrate.py --task-file .taskmaster/tasks/tasks.json
 
-# Or with config file
-python -m cadence.orchestrator /path/to/project /path/to/tasks.json --config config.yaml
+# Or with custom project root
+python orchestrate.py --task-file .taskmaster/tasks/tasks.json --project-root /path/to/project
+
+# With custom config file
+python orchestrate.py --task-file .taskmaster/tasks/tasks.json --config custom-config.yaml
 ```
 
-### Using Python API
-
-```python
-from cadence import TaskSupervisor
-
-# Create supervisor with max turns safety limit
-supervisor = TaskSupervisor(max_turns=40)
-
-# Run with Task Master integration
-success = supervisor.run_with_taskmaster("path/to/tasks.json")
-```
+**Note**: Direct supervisor mode has been removed. All task execution must go through the orchestrator to ensure proper workflow management and TaskMaster integration.
 
 ## How It Works
 
@@ -78,6 +92,22 @@ Claude Cadence implements a supervisor-agent pattern where:
 - **No arbitrary checkpoints** - only task completion or safety limits stop execution
 
 This ensures agents focus on completing work rather than managing execution windows.
+
+### Dispatcher Architecture
+
+The dispatch system follows a clean inheritance hierarchy:
+
+```
+AgentDispatcher (Base)
+    ↓
+EnhancedAgentDispatcher (Adds fix tracking & escalation)
+    ↓
+FixAgentDispatcher (Adds fix-specific features)
+```
+
+- **AgentDispatcher**: Core message dispatching, callbacks, and timeout handling
+- **EnhancedAgentDispatcher**: Fix iteration tracking, escalation handling, persistence
+- **FixAgentDispatcher**: Context preservation, circular dependency detection, verification workflows
 
 ### YAML-Based Prompt System
 

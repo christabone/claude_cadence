@@ -48,7 +48,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "cadence=cadence:main",
+            "cadence=cadence.__main__:main",
         ],
     },
     include_package_data=True,

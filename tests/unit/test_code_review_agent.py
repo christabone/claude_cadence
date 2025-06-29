@@ -356,7 +356,7 @@ class TestCodeReviewAgent:
         result = agent._parse_review_response(response, files)
 
         assert result.success is False
-        assert "additional investigation" in result.error_message
+        assert "additional investigation" in result.error_message.lower()
         assert result.files_reviewed == files
 
     def test_parse_review_response_error(self):

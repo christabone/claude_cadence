@@ -17,8 +17,11 @@ Do not end your response without providing the JSON decision.
 
 ## Required Output
 
-After analyzing the tasks, output ONLY a JSON object (no other text) with this exact structure:
+After analyzing the tasks, output ONLY a JSON object (no other text).
 
+### Available Actions
+
+1. **"execute"** - When there are pending subtasks to work on:
 ```json
 {
     "action": "execute",
@@ -40,6 +43,44 @@ After analyzing the tasks, output ONLY a JSON object (no other text) with this e
     "guidance": "Focus on implementing secure authentication using JWT tokens",
     "session_id": "{{ session_id }}",
     "reason": "Task 1 has 2 incomplete subtasks that need implementation"
+}
+```
+
+2. **"skip"** - When current task has no pending subtasks:
+```json
+{
+    "action": "skip",
+    "session_id": "{{ session_id }}",
+    "reason": "All subtasks for task 1 are already completed"
+}
+```
+
+3. **"complete"** - When ALL tasks in project are done:
+```json
+{
+    "action": "complete",
+    "session_id": "{{ session_id }}",
+    "reason": "All Task Master tasks have been completed successfully"
+}
+```
+
+4. **"get_next_task"** - When you need to retrieve the next task:
+```json
+{
+    "action": "get_next_task",
+    "session_id": "{{ session_id }}",
+    "reason": "Need to fetch the next available task from TaskMaster"
+}
+```
+
+5. **"zen_mcp_codereview"** - Signal that code review was triggered:
+```json
+{
+    "action": "zen_mcp_codereview",
+    "task_id": "1.2",
+    "review_scope": "task",
+    "session_id": "{{ session_id }}",
+    "reason": "Task complete, triggered code review via zen MCP"
 }
 ```
 

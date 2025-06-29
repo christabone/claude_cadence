@@ -117,7 +117,7 @@ class WorkflowStateMachine:
         initial_state: WorkflowState = WorkflowState.WORKING,
         context: Optional[WorkflowContext] = None,
         persistence_path: Optional[Path] = None,
-        max_history_size: int = 1000,
+        max_history_size: Optional[int] = None,
         enable_persistence: bool = True
     ):
         """
@@ -127,7 +127,7 @@ class WorkflowStateMachine:
             initial_state: Starting state for the workflow
             context: Context information for the workflow
             persistence_path: Path to save state for recovery
-            max_history_size: Maximum number of transitions to keep in history
+            max_history_size: Maximum number of transitions to keep in history (default: 1000)
             enable_persistence: Whether to enable state persistence
         """
         self._current_state = initial_state
@@ -137,7 +137,9 @@ class WorkflowStateMachine:
         self._lock = threading.Lock()
 
         # Use bounded deque for transition history to prevent memory leaks
-        self._transition_history: deque = deque(maxlen=max_history_size)
+        # Default to 1000 if not specified
+        history_size = max_history_size if max_history_size is not None else 1000
+        self._transition_history: deque = deque(maxlen=history_size)
         self._event_handlers: Dict[WorkflowState, List[Callable]] = {}
         self._transition_handlers: Dict[tuple, List[Callable]] = {}
 
@@ -481,15 +483,17 @@ class WorkflowStateManager:
     Allows managing multiple concurrent workflows by session or task ID.
     """
 
-    def __init__(self, persistence_dir: Optional[Path] = None):
+    def __init__(self, persistence_dir: Optional[Path] = None, max_history_size: Optional[int] = None):
         """
         Initialize the workflow state manager.
 
         Args:
             persistence_dir: Directory to store state files
+            max_history_size: Maximum number of transitions to keep in history for new workflows
         """
         self._workflows: Dict[str, WorkflowStateMachine] = {}
         self._persistence_dir = persistence_dir or Path(".cadence/workflow_states")
+        self._max_history_size = max_history_size
         self._lock = threading.Lock()
 
     def get_or_create_workflow(
@@ -519,7 +523,8 @@ class WorkflowStateManager:
                 self._workflows[workflow_id] = WorkflowStateMachine(
                     initial_state=initial_state,
                     context=context,
-                    persistence_path=persistence_path
+                    persistence_path=persistence_path,
+                    max_history_size=self._max_history_size
                 )
 
             return self._workflows[workflow_id]

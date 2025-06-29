@@ -18,6 +18,7 @@ from .agent_messages import (
 from .fix_iteration_tracker import (
     FixIterationManager, EscalationStrategy, PersistenceType
 )
+from .config import DEFAULT_AGENT_TIMEOUT_MS
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 class DispatchConfig:
     """Configuration for Enhanced Agent Dispatcher"""
     max_concurrent_agents: int = 2
-    default_timeout_ms: int = 600000
+    default_timeout_ms: int = DEFAULT_AGENT_TIMEOUT_MS
     enable_fix_tracking: bool = True
     enable_escalation: bool = True
     max_fix_iterations: int = 3

@@ -70,6 +70,28 @@ Both tools:
 - Add regex pattern for valid session IDs
 - Validate file paths and ensure they're within project bounds
 
+### 6. Fix Remaining Config Access Inconsistencies in Orchestrator
+**File**: `cadence/orchestrator.py`
+**Issue**: Multiple instances of `self.config.get()` should use `self.cadence_config` object instead
+
+Remaining instances to fix:
+- Line 146: `dispatch_config_dict = self.config.get("dispatch", {})`
+- Line 870: `dispatch_config = self.config.get("dispatch", {})`
+- Line 995-1004: Multiple logging statements using `self.config.get()`
+- Line 1007: `mcp_servers = self.config.get('integrations', {}).get('mcp', {})`
+- Line 1017: `dispatch_config = self.config.get('dispatch', {})`
+- Line 1047: `max_iterations = self.config.get("orchestration", {}).get("max_iterations", 100)`
+- Line 1161: `max_scratchpad_retries = self.config.execution.max_scratchpad_retries` (already correct)
+- Line 1262: `zen_config = self.config.get("zen_integration", {})`
+- Line 1300: `"max_turns": self.config.get("execution", {}).get("max_agent_turns", 120)`
+- Line 1389-1392: `basic_tools = self.config.get("supervisor", {}).get("tools", [])`
+- Line 1392: `mcp_servers = self.config.get("integrations", {}).get("mcp", {}).get("supervisor_servers", [])`
+- Line 1400: `supervisor_config = self.config.get("supervisor")`
+- Line 1591: `quick_quit_threshold = self.config.get("orchestration", {}).get("quick_quit_seconds", 10.0)`
+- Line 1640: `agent_config = self.config.get("agent")`
+
+**TODO**: Replace all these with proper dataclass access like `self.cadence_config.dispatch.enabled` etc.
+
 ## Low Priority
 
 ### 4. Remove Unused Constants
@@ -149,3 +171,31 @@ Both tools:
 - Make it optional/configurable for users who want cost visibility
 - Note: Not needed for users with Claude subscriptions, but useful for API key users
 - Zen tool costs would be separate and not tracked by cadence
+
+## Subscription Limit Handling (from root TODO.md)
+
+### 17. Catch and Parse Claude Usage Limit Messages
+- **Issue**: When Claude subscription runs out, agents output "Claude AI usage limit reached|timestamp" but we don't catch this message in our monitoring
+- **Current Behavior**: Agent exits with return code 1, but we don't parse the specific error message
+- **Needed Enhancement**: Add message parsing to detect subscription limit messages and handle them gracefully
+- **Example Error Pattern**: `[AGENT] Claude AI usage limit reached|1750780800`
+- **Priority**: Medium
+- **Implementation**: Add regex pattern matching in agent output parsing to detect subscription limit messages
+
+### 18. Graceful Degradation on Subscription Limits
+- **Issue**: When subscription runs out, the orchestrator continues trying to run supervisor and agents
+- **Needed Enhancement**: Detect subscription limit and either:
+  - Pause execution until limit resets
+  - Gracefully exit with appropriate error message
+  - Switch to alternative model if available
+- **Priority**: Medium
+
+### 19. Error Message Standardization
+- Standardize error message formats across all components
+- Improve error logging and debugging capabilities
+- Add structured error codes for different failure types
+
+### 20. Resource Management
+- Add memory usage monitoring for large validation tasks
+- Implement cleanup procedures for temporary files and processes
+- Add disk space checks before starting large operations

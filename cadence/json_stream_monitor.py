@@ -16,6 +16,9 @@ class SimpleJSONStreamMonitor:
     after each new line. Returns complete JSON objects when found.
     """
 
+    MAX_BUFFER_SIZE = 50000  # Maximum number of lines to buffer (50K lines)
+    MAX_LINE_LENGTH = 1000000  # Maximum length of a single line (1MB)
+
     def __init__(self):
         self.buffer: List[str] = []
         self.in_json = False
@@ -34,11 +37,22 @@ class SimpleJSONStreamMonitor:
         if not line:
             return None
 
+        # Check line length limit
+        if len(line) > self.MAX_LINE_LENGTH:
+            error_msg = f"Line exceeds maximum length ({len(line)} > {self.MAX_LINE_LENGTH}). This could indicate corrupt data or a security issue."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
         # Start buffering if line starts with JSON object or array
         if not self.in_json and line and line[0] in '{[':
             self.in_json = True
             self.buffer = [line]
         elif self.in_json:
+            # Check buffer size limit
+            if len(self.buffer) >= self.MAX_BUFFER_SIZE:
+                error_msg = f"JSON buffer size exceeded ({self.MAX_BUFFER_SIZE} lines). The JSON object is too large or malformed."
+                logger.error(error_msg)
+                raise ValueError(error_msg)
             self.buffer.append(line)
         else:
             # Not in JSON mode and doesn't start JSON - plain text

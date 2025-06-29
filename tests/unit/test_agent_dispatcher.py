@@ -22,8 +22,10 @@ class TestAgentDispatcher:
         id2 = dispatcher.generate_message_id()
 
         assert id1 != id2
-        assert id1.startswith("msg-")
-        assert len(id1.split("-")) == 3
+        # Should be a valid UUID
+        import uuid
+        uuid.UUID(id1)  # Will raise ValueError if not valid UUID
+        uuid.UUID(id2)  # Will raise ValueError if not valid UUID
 
     def test_dispatch_agent(self):
         """Test dispatching an agent"""
@@ -56,7 +58,9 @@ class TestAgentDispatcher:
         )
 
         # Verify
-        assert message_id.startswith("msg-")
+        # message_id should be a valid UUID
+        import uuid
+        uuid.UUID(message_id)  # Will raise ValueError if not valid UUID
         assert message_id in dispatcher.pending_messages
         assert message_id in dispatcher.callbacks
         assert dispatcher.callbacks[message_id] == callback
@@ -216,7 +220,7 @@ class TestAgentDispatcher:
             context=MessageContext("t1", "s1", [], "/p"),
             success_criteria=SuccessCriteria(),
             callback=CallbackInfo("handler", 30000),
-            message_id="test-msg-1"
+            message_id="550e8400-e29b-41d4-a716-446655440004"
         )
 
         # Queue it
@@ -225,7 +229,7 @@ class TestAgentDispatcher:
         # Verify we can get it back
         retrieved = dispatcher.get_next_message()
         assert retrieved is not None
-        assert retrieved.message_id == "test-msg-1"
+        assert retrieved.message_id == "550e8400-e29b-41d4-a716-446655440004"
 
         # Queue should be empty now
         assert dispatcher.get_next_message() is None
@@ -306,7 +310,7 @@ class TestAgentDispatcher:
             context=context,
             success_criteria=SuccessCriteria(),
             callback=CallbackInfo("resp_callback", 30000),
-            message_id="response-1",
+            message_id="550e8400-e29b-41d4-a716-446655440005",
             payload={"original_message_id": msg_id, "result": "success"}
         )
 

@@ -110,7 +110,7 @@ class TestAgentMessages:
                 "handler": "callback_handler",
                 "timeout_ms": 45000
             },
-            "message_id": "test-message-001",  # Use test ID format
+            "message_id": "550e8400-e29b-41d4-a716-446655440001",  # Valid UUID format
             "payload": {"result": "success"}
         }
 
@@ -346,7 +346,7 @@ class TestAgentMessages:
             "agent_type": "fix",
             "priority": "critical",
             "timestamp": "2025-06-27T17:45:00.000Z",
-            "session_id": "test-session-001",
+            "session_id": "550e8400-e29b-41d4-a716-446655440003",
             "context": {
                 "task_id": "enhanced-from-dict",
                 "parent_session": "session-efd",
@@ -364,7 +364,7 @@ class TestAgentMessages:
                 "handler": "enhanced_callback",
                 "timeout_ms": 90000
             },
-            "message_id": "test-message-002",
+            "message_id": "550e8400-e29b-41d4-a716-446655440002",
             "payload": {"metadata": "enhanced"}
         }
 
@@ -375,7 +375,7 @@ class TestAgentMessages:
         assert message.agent_type == AgentType.FIX
         assert message.priority == Priority.CRITICAL
         assert message.timestamp == "2025-06-27T17:45:00.000Z"
-        assert message.session_id == "test-session-001"
+        assert message.session_id == "550e8400-e29b-41d4-a716-446655440003"
         assert message.context.file_paths == ["utils.py"]
         assert message.context.modifications == {"complexity": "high"}
         assert message.context.scope == {"impact": "significant"}

@@ -30,7 +30,7 @@ class AgentDispatcher:
 
     def generate_message_id(self) -> str:
         """Generate unique message ID"""
-        return f"msg-{uuid.uuid4().hex[:8]}-{int(datetime.now().timestamp())}"
+        return str(uuid.uuid4())
 
     def dispatch_agent(
         self,
@@ -140,12 +140,18 @@ class AgentDispatcher:
         if not original:
             raise ValueError(f"No pending message found: {original_message_id}")
 
+        # Create a new callback with valid timeout_ms (minimum 1000ms)
+        error_callback = CallbackInfo(
+            handler=original.callback.handler,
+            timeout_ms=max(1000, original.callback.timeout_ms)
+        )
+
         return AgentMessage(
             message_type=MessageType.ERROR,
             agent_type=original.agent_type,
             context=original.context,
             success_criteria=original.success_criteria,
-            callback=original.callback,
+            callback=error_callback,
             message_id=self.generate_message_id(),
             payload={
                 "original_message_id": original_message_id,
@@ -239,6 +245,7 @@ class AgentDispatcher:
 
         # Create timer and store reference while holding lock
         timer = threading.Timer(timeout_seconds, timeout_handler)
+        timer.daemon = True  # Set as daemon thread to prevent blocking shutdown
         self.timers[message_id] = timer
         # Start timer after storing reference but still within lock
         timer.start()

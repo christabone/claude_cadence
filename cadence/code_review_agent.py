@@ -7,10 +7,12 @@ with enhanced error handling, model fallback, and token management.
 
 import logging
 import time
+import json
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, Any, Optional, List, Union, Callable
 from pathlib import Path
+# Note: retry_utils not needed for MCP responses - they don't need retry
 
 logger = logging.getLogger(__name__)
 
@@ -305,22 +307,42 @@ class CodeReviewAgent:
                     ]
                 )
 
-            # Parse response and check for token limit issues
-            if isinstance(response, dict):
-                if "error" in response and "exceeds maximum allowed tokens" in str(response["error"]):
-                    return ReviewResult(
-                        success=False,
-                        token_limit_exceeded=True,
-                        error_message="Token limit exceeded",
-                        files_reviewed=file_paths
-                    )
+            # Parse response - no retry needed for MCP responses
+            try:
+                # If response is a string, parse it as JSON
+                if isinstance(response, str):
+                    parsed_response = json.loads(response)
+                else:
+                    parsed_response = response
 
-                return self._parse_review_response(response, file_paths)
+                # Check for token limit issues
+                if isinstance(parsed_response, dict):
+                    if "error" in parsed_response and "exceeds maximum allowed tokens" in str(parsed_response["error"]):
+                        return ReviewResult(
+                            success=False,
+                            token_limit_exceeded=True,
+                            error_message="Token limit exceeded",
+                            files_reviewed=file_paths
+                        )
 
-            return ReviewResult(
-                success=False,
-                error_message="Unexpected response format from review tool"
-            )
+                    return self._parse_review_response(parsed_response, file_paths)
+
+                return ReviewResult(
+                    success=False,
+                    error_message="Unexpected response format from review tool"
+                )
+
+            except json.JSONDecodeError as e:
+                # Truncate response for logging if too long
+                truncated_response = response if len(str(response)) <= 500 else str(response)[:500] + "..."
+                logger.error(f"Failed to parse MCP response - JSONDecodeError: {e}\n"
+                           f"Error position: line {e.lineno}, column {e.colno}\n"
+                           f"Response preview: {truncated_response}")
+                return ReviewResult(
+                    success=False,
+                    error_message=f"Failed to parse review response: {e}",
+                    files_reviewed=file_paths
+                )
 
         except Exception as e:
             error_msg = str(e)
@@ -359,7 +381,7 @@ class CodeReviewAgent:
         """Parse the response from zen codereview tool"""
 
         # Handle successful response
-        if response.get("status") in ["analyze_complete", "pause_for_code_review"]:
+        if response.get("status") == "analyze_complete":
             return ReviewResult(
                 success=True,
                 issues_found=response.get("issues_found", []),
