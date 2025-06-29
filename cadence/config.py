@@ -305,6 +305,8 @@ class CadenceConfig:
     })
     orchestration: OrchestrationConfig = field(default_factory=OrchestrationConfig)
     fix_agent_dispatcher: FixAgentDispatcherConfig = field(default_factory=FixAgentDispatcherConfig)
+    dispatch: Dict[str, Any] = field(default_factory=dict)
+    scratchpad_retry: Dict[str, Any] = field(default_factory=dict)
     retry_behavior: Dict[str, Any] = field(default_factory=lambda: {
         "max_json_retries": 3,
         "backoff_strategy": "linear",
@@ -406,7 +408,7 @@ class ConfigLoader:
 
     def _update_dict_configs(self, config: CadenceConfig, data: dict) -> None:
         """Update dictionary configurations with deep merge"""
-        dict_keys = ['project', 'integrations', 'zen_integration', 'processing', 'development', 'retry_behavior']
+        dict_keys = ['project', 'integrations', 'zen_integration', 'processing', 'development', 'retry_behavior', 'dispatch', 'scratchpad_retry']
         for key in dict_keys:
             if key in data:
                 # For dictionaries, deep merge with defaults instead of replacing
