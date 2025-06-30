@@ -133,12 +133,16 @@ def run_claude_with_realtime_retry(
         # Build command (may be different on retries)
         cmd = build_command_func()
 
+        # Check if --continue flag is present
+        continue_flag = "--continue" in cmd
+        continue_status = "with --continue" if continue_flag else "without --continue"
+
         # Log retry status
         if attempt > 0:
             logger.warning(f"Retrying {process_name} due to parsing error (attempt {attempt + 1})")
-            logger.info(f"{process_name} STARTING... (RETRY {attempt + 1}/{max_retries})")
+            logger.info(f"{process_name} STARTING... (RETRY {attempt + 1}/{max_retries}) [{continue_status}]")
         else:
-            logger.info(f"{process_name} STARTING...")
+            logger.info(f"{process_name} STARTING... [{continue_status}]")
 
         logger.info("-" * 60)
 

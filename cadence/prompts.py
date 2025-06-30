@@ -46,6 +46,15 @@ class PromptGenerator:
             # It's a config path, create a new PromptLoader
             self.loader = PromptLoader(loader_or_config_path)
 
+    def _get_common_agent_context(self) -> Dict[str, Any]:
+        """Get common agent context configuration sections"""
+        return {
+            'core_agent_context': self.loader.config.get('core_agent_context', {}),
+            'shared_agent_context': self.loader.config.get('shared_agent_context', {}),
+            'safety_notice_section': self.loader.config.get('safety_notice_section', ''),
+            'serena_setup': self.loader.config.get('serena_setup', '')
+        }
+
     def get_initial_prompt(self, *args, **kwargs):
         """Alias for generate_initial_todo_prompt"""
         return self.generate_initial_todo_prompt(*args, **kwargs)
@@ -67,14 +76,16 @@ class PromptGenerator:
                 'max_turns': context.max_turns,
                 'session_id': session_id,
                 'task_numbers': task_numbers if task_numbers else "N/A",
-                'project_path': context.project_path   # Unified project path
+                'project_path': context.project_path,   # Unified project path
+                **self._get_common_agent_context()  # Include common agent context
             }
 
             # Generate TODO list
             todo_items = []
             for i, todo in enumerate(context.todos, 1):
+                todo_templates = self.loader.config.get('todo_templates', {})
                 item = self.loader.format_template(
-                    self.loader.config['todo_templates']['todo_item'],
+                    todo_templates.get('todo_item', 'TODO {number}: {todo_text}'),
                     {
                         'number': i,
                         'todo_text': todo
@@ -83,30 +94,38 @@ class PromptGenerator:
                 todo_items.append(item)
 
             todo_list_str = "\n".join(todo_items)
+            todo_templates = self.loader.config.get('todo_templates', {})
             prompt_context['todo_list'] = self.loader.format_template(
-                self.loader.config['todo_templates']['todo_list'],
+                todo_templates.get('todo_list', '{todo_items}'),
                 {'todo_items': todo_list_str}
             )
 
             # Build initial prompt from sections
-            sections = self.loader.config['agent_prompts']['initial']['sections']
+            agent_prompts = self.loader.config.get('agent_prompts', {})
+            initial_prompt = agent_prompts.get('initial', {})
+            sections = initial_prompt.get('sections', [])
             return self.loader.build_prompt_from_sections(sections, prompt_context)
 
 
     def _determine_continuation_type(self, supervisor_analysis: Dict[str, Any]) -> str:
         """Determine the type of continuation based on supervisor analysis"""
+        todo_templates = self.loader.config.get('todo_templates', {})
+        continuation_types = todo_templates.get('continuation_types', {})
+
         if supervisor_analysis.get('all_complete', False):
-            return self.loader.config['todo_templates']['continuation_types']['complete_new_tasks']
+            return continuation_types.get('complete_new_tasks', 'complete_new_tasks')
         elif supervisor_analysis.get('has_issues', False):
-            return self.loader.config['todo_templates']['continuation_types']['fixing_issues']
+            return continuation_types.get('fixing_issues', 'fixing_issues')
         else:
-            return self.loader.config['todo_templates']['continuation_types']['incomplete']
+            return continuation_types.get('incomplete', 'incomplete')
 
     def _generate_supervisor_analysis_section(self, supervisor_analysis: Dict[str, Any], analysis_guidance: str) -> str:
         """Generate the supervisor analysis section of the prompt"""
+        todo_templates = self.loader.config.get('todo_templates', {})
+
         if supervisor_analysis.get('all_complete', False):
             return self.loader.format_template(
-                self.loader.config['todo_templates']['supervisor_complete_analysis'],
+                todo_templates.get('supervisor_complete_analysis', 'Previous work completed. {previous_work_summary}\nNew objectives: {new_objectives}'),
                 {
                     'previous_work_summary': supervisor_analysis.get('work_summary', 'See previous scratchpad'),
                     'new_objectives': supervisor_analysis.get('new_objectives', 'Complete the new TODOs below')
@@ -114,7 +133,7 @@ class PromptGenerator:
             )
         else:
             return self.loader.format_template(
-                self.loader.config['todo_templates']['supervisor_incomplete_analysis'],
+                todo_templates.get('supervisor_incomplete_analysis', 'Previous work summary: {previous_work_summary}\nIssues found: {issues_found}\nGuidance: {specific_guidance}'),
                 {
                     'previous_work_summary': supervisor_analysis.get('work_summary', 'See previous scratchpad'),
                     'issues_found': supervisor_analysis.get('issues', 'None identified'),
@@ -141,9 +160,11 @@ class PromptGenerator:
             return "=== NO REMAINING TODOS ===\nAll previous TODOs have been completed."
 
         remaining_items = []
+        todo_templates = self.loader.config.get('todo_templates', {})
+
         for i, todo in enumerate(context.remaining_todos[:10], 1):
             item = self.loader.format_template(
-                self.loader.config['todo_templates']['todo_item'],
+                todo_templates.get('todo_item', 'TODO {number}: {todo_text}'),
                 {
                     'number': i,
                     'todo_text': todo
@@ -153,7 +174,7 @@ class PromptGenerator:
 
         todo_list_str = "\n".join(remaining_items)
         return self.loader.format_template(
-            self.loader.config['todo_templates']['todo_list'],
+            todo_templates.get('todo_list', '{todo_items}'),
             {
                 'todo_items': todo_list_str,
                 'session_id': supervisor_analysis.get('session_id', 'unknown'),
@@ -167,8 +188,9 @@ class PromptGenerator:
             return ""
 
         issue_list = "\n".join([f"⚠️  {issue}" for issue in context.issues_encountered[-3:]])
+        todo_templates = self.loader.config.get('todo_templates', {})
         return self.loader.format_template(
-            self.loader.config['todo_templates']['issues_section'],
+            todo_templates.get('issues_section', '=== ISSUES ENCOUNTERED ===\n{issue_list}'),
             {'issue_list': issue_list}
         )
 
@@ -191,11 +213,14 @@ class PromptGenerator:
                 'task_status_section': self._generate_task_status_section(context),
                 'remaining_todos': self._generate_remaining_todos_section(context, supervisor_analysis),
                 'issues_section': self._generate_issues_section(context),
-                'project_path': context.project_path  # Use context.project_path directly
+                'project_path': context.project_path,  # Use context.project_path directly
+                **self._get_common_agent_context()  # Include common agent context
             }
 
             # Build continuation prompt from sections
-            sections = self.loader.config['agent_prompts']['continuation']['sections']
+            agent_prompts = self.loader.config.get('agent_prompts', {})
+            continuation_prompt = agent_prompts.get('continuation', {})
+            sections = continuation_prompt.get('sections', [])
             return self.loader.build_prompt_from_sections(sections, prompt_context)
 
 
@@ -223,9 +248,11 @@ class PromptGenerator:
         }
 
         # Add task progress if available
+        supervisor_prompts = self.loader.config.get('supervisor_prompts', {})
+
         if context.completed_todos or context.remaining_todos:
             prompt_context['task_progress'] = self.loader.format_template(
-                self.loader.config['supervisor_prompts']['task_progress_template'],
+                supervisor_prompts.get('task_progress_template', 'Completed: {completed_count}, Remaining: {remaining_count}'),
                 {
                     'completed_count': len(context.completed_todos),
                     'remaining_count': len(context.remaining_todos)
@@ -239,7 +266,7 @@ class PromptGenerator:
             history_items = []
             for i, exec in enumerate(previous_executions[-2:], 1):  # Last 2 executions
                 item = self.loader.format_template(
-                    self.loader.config['supervisor_prompts']['history_item'],
+                    supervisor_prompts.get('history_item', 'Execution {num}: {summary}'),
                     {
                         'num': i,
                         'summary': exec.get('summary', 'No summary available')
@@ -248,14 +275,15 @@ class PromptGenerator:
                 history_items.append(item)
 
             prompt_context['execution_history'] = self.loader.format_template(
-                self.loader.config['supervisor_prompts']['execution_history_template'],
+                supervisor_prompts.get('execution_history_template', 'Previous executions:\n{history_items}'),
                 {'history_items': "\n".join(history_items)}
             )
         else:
             prompt_context['execution_history'] = ""
 
         # Build supervisor prompt from sections
-        sections = self.loader.config['supervisor_prompts']['analysis']['sections']
+        analysis_prompt = supervisor_prompts.get('analysis', {})
+        sections = analysis_prompt.get('sections', [])
         return self.loader.build_prompt_from_sections(sections, prompt_context)
 
     def generate_final_summary(
@@ -275,10 +303,12 @@ class PromptGenerator:
         }
 
         # Add completed tasks section
+        final_summary = self.loader.config.get('final_summary', {})
+
         if context.completed_todos:
             completed_list = "\n".join([f"✅ {todo}" for todo in context.completed_todos])
             prompt_context['completed_section'] = self.loader.format_template(
-                self.loader.config['final_summary']['completed_section'],
+                final_summary.get('completed_section', 'Completed tasks:\n{completed_list}'),
                 {'completed_list': completed_list}
             )
         else:
@@ -288,7 +318,7 @@ class PromptGenerator:
         if context.remaining_todos:
             incomplete_list = "\n".join([f"❌ {todo}" for todo in context.remaining_todos])
             prompt_context['incomplete_section'] = self.loader.format_template(
-                self.loader.config['final_summary']['incomplete_section'],
+                final_summary.get('incomplete_section', 'Incomplete tasks:\n{incomplete_list}'),
                 {'incomplete_list': incomplete_list}
             )
         else:
@@ -307,7 +337,7 @@ class PromptGenerator:
         if context.remaining_todos:
             focus_items = "\n".join([f"- {todo}" for todo in context.remaining_todos[:3]])
             prompt_context['recommendations'] = self.loader.format_template(
-                self.loader.config['final_summary']['recommendations'],
+                final_summary.get('recommendations', 'Next focus areas:\n{focus_items}'),
                 {'focus_items': focus_items}
             )
         else:
@@ -315,7 +345,7 @@ class PromptGenerator:
 
         # Format the complete summary
         return self.loader.format_template(
-            self.loader.config['final_summary']['template'],
+            final_summary.get('template', 'Summary:\nExecutions: {executions_count}\nTotal turns: {total_turns}\n{completed_section}\n{incomplete_section}'),
             prompt_context
         )
 

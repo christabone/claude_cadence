@@ -219,6 +219,28 @@ from cadence.prompt_loader import load_yaml_with_includes
 content = load_yaml_with_includes("prompts.yaml")
 ```
 
+## Security Notice
+
+⚠️ **Important Security Warning**: Claude Cadence uses the `--dangerously-skip-permissions` flag when executing Claude Code commands. This flag bypasses Claude Code's built-in permission system and automatically approves all tool use.
+
+**Security Implications:**
+- Agents can execute any tool without explicit user approval
+- This includes file operations, shell commands, and other potentially destructive actions
+- Only use Claude Cadence in trusted environments with appropriate safeguards
+
+**Why This Design Choice:**
+- Claude Cadence is designed as a hobby automation tool for developers
+- The permission system would interrupt the autonomous task execution flow
+- Users are expected to review Task Master tasks before execution
+- The system is intended for use with your own code in controlled environments
+
+**Recommended Safeguards:**
+- Run Claude Cadence in isolated development environments
+- Use version control and commit before running automated tasks
+- Review Task Master task lists carefully before execution
+- Consider using read-only file systems or containers for sensitive operations
+- Monitor agent execution through scratchpad files and logs
+
 ## Documentation
 
 - **[Prompt System Guide](docs/architecture/claude_cadence_prompt_system_guide.md)** - **Complete prompt system reference**

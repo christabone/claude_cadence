@@ -31,29 +31,42 @@ execution:
   save_logs: true
   # Log directory (relative to working directory)
   log_dir: ".cadence/logs"
+  # Log level for file logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  log_level: "INFO"
+  # Clean up all logs on startup (useful for development)
+  clean_logs_on_startup: true
+  # Maximum total size of log directories before cleanup (in MB)
+  max_log_size_mb: 20
 
 # Agent configuration
 agent:
-  # Model to use for the main agent execution
-  model: "claude-sonnet-4-20250514"  # Use model alias for latest Sonnet
-  # Tools available to the agent
-  # Comment out any tools you want to disable
-  tools:
-    - bash
-    - read
-    - write
-    - edit
-    - grep
-    - glob
-    - search
-    - mcp
-    - WebFetch
-  # Additional claude CLI flags
-  extra_flags:
-    - "--dangerously-skip-permissions"
-  # Whether to use --continue flag for agent sessions
-  # Set to false to start fresh each time (saves tokens)
-  use_continue: false
+  # Default settings for all agents
+  defaults:
+    # Model to use for agent execution
+    model: "claude-sonnet-4-20250514"  # Use model alias for latest Sonnet
+    # Tools available to the agent
+    tools:
+      - bash
+      - read
+      - write
+      - edit
+      - grep
+      - glob
+      - search
+      - mcp
+      - WebFetch
+    # Additional claude CLI flags
+    extra_flags: []
+      # Note: --dangerously-skip-permissions removed for security
+    # Number of times orchestrator should retry a failed agent
+    retry_count: 1
+    # Whether to use --continue flag
+    use_continue: false
+    # Timeout settings
+    timeout_seconds: 300  # 5 minutes
+    # Temperature for responses
+    temperature: 0.2
+
 
 # Supervisor configuration
 supervisor:
@@ -98,6 +111,15 @@ supervisor:
   # File size limits - moved from SupervisorDefaults
   max_log_size: 52428800  # 50MB
   max_prompt_size: 102400  # 100KB
+  # Zen integration settings for supervisor
+  zen_integration:
+    enabled: true
+    stuck_detection: true
+    auto_debug_threshold: 3
+    cutoff_detection: true
+    # Code review frequency - when to run zen code review
+    # Options: "none" (disabled), "task" (after each task), "project" (at end of project)
+    code_review_frequency: "task"
 # Task completion detection
 task_detection:
   # Methods to use for detecting task completion (in priority order)
@@ -219,8 +241,8 @@ file_patterns:
   output_file: "output_{session_id}.log"
   error_file: "error_{session_id}.log"
   supervisor_log_file: "supervisor_{timestamp}.log"
-# Zen integration settings
-zen_integration:
+# Zen processing configuration settings
+zen_processing_config:
   # Number of output lines to include in zen context
   output_lines_limit: 200
   # Lines to check for help requests in scratchpad
@@ -230,9 +252,6 @@ zen_integration:
   last_lines_to_check: 50
   # Error detection settings
   auto_debug_error_threshold: 3
-  # Code review frequency - when to run zen code review
-  # Options: "none" (disabled), "task" (after each task), "project" (at end of project)
-  code_review_frequency: "task"
   # Models for code review (no fallbacks)
   primary_review_model: "gemini-2.5-pro"
   secondary_review_model: "o3"
@@ -266,6 +285,20 @@ processing:
   max_output_truncate_length: 3000
   # Seconds per turn estimate (rough approximation)
   seconds_per_turn_estimate: 30
+  # Code file extensions for file filtering
+  code_file_extensions:
+    - ".py"
+    - ".js"
+    - ".ts"
+    - ".java"
+    - ".cpp"
+    - ".c"
+    - ".h"
+    - ".php"
+    - ".rb"
+    - ".go"
+    - ".rs"
+    - ".cs"
 # Development settings
 development:
   # Enable debug output
@@ -275,35 +308,6 @@ development:
   # Pretty print JSON in logs
   pretty_json: true
 
-# Fix Agent Dispatcher settings
-fix_agent_dispatcher:
-  # Maximum attempts to fix an issue before giving up
-  max_attempts: 3
-  # Timeout for each fix attempt (milliseconds)
-  timeout_ms: 300000  # 5 minutes
-  # Enable automatic fix dispatch
-  enable_auto_fix: true
-  # Minimum severity to trigger auto-fix ("low", "medium", "high", "critical")
-  severity_threshold: "high"
-  # Enable verification of fixes
-  enable_verification: true
-  # Timeout for verification (milliseconds)
-  verification_timeout_ms: 60000  # 1 minute
-  # Maximum turns for fix agent execution
-  max_turns: 30
-  # Validation constants for timeout values
-  validation:
-    # Minimum timeout value in milliseconds (100ms for testing flexibility)
-    min_timeout_ms: 100
-    # Maximum timeout value in milliseconds (1 hour safety limit)
-    max_timeout_ms: 3600000
-  # Circular dependency detection
-  circular_dependency:
-    # Maximum number of times a file can be modified in failed attempts
-    # before suspecting a circular dependency
-    max_file_modifications: 3
-    # Minimum number of attempts before checking for circular dependencies
-    min_attempts_before_check: 5
 
 # Orchestration settings
 orchestration:
@@ -322,7 +326,7 @@ orchestration:
   # Orchestrated mode (required for new architecture)
   mode: "orchestrated"
   # Quick quit detection - if agent/supervisor exits in under this many seconds, it's an error
-  quick_quit_seconds: 10.0
+  quick_quit_seconds: 30.0
   # Session timeout (seconds) - moved from OrchestratorDefaults
   session_timeout: 300
   # Number of sessions to keep during cleanup - moved from OrchestratorDefaults
@@ -346,3 +350,12 @@ retry_behavior:
   max_file_retries: 3
   # Enable detailed retry logging
   verbose_logging: false
+
+# Scratchpad retry configuration
+scratchpad_retry:
+  # Maximum number of retries to create scratchpad
+  max_retries: 5
+  # Tools allowed for scratchpad creation
+  allowed_tools: "Write,Read,Bash,LS"
+  # Maximum turns for scratchpad retry
+  max_turns: 5

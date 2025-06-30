@@ -4,6 +4,8 @@ Logging utilities for Claude Cadence with color support
 
 import logging
 import sys
+import os
+from pathlib import Path
 
 # ANSI color codes
 class Colors:
@@ -62,7 +64,6 @@ class ColoredFormatter(logging.Formatter):
         'ERROR': Colors.BOLD_RED,
         'WARNING': Colors.BOLD_YELLOW,
         'Previous agent result:': Colors.CYAN,
-        'Cleaning up': Colors.YELLOW,
         '===': Colors.BOLD_WHITE,
         '---': Colors.WHITE,
     }
@@ -148,3 +149,44 @@ def get_colored_logger(name, level=logging.INFO):
         logger.propagate = False
 
     return logger
+
+
+def setup_file_logging(session_id: str, component_type: str, log_dir: Path, level=logging.DEBUG):
+    """Attach a plain file handler to the component's logger.
+
+    Args:
+        session_id: The session ID for organizing logs
+        component_type: The component type (orchestrator, supervisor, agent)
+        log_dir: The base log directory
+        level: The logging level (default: DEBUG)
+
+    Returns:
+        The configured logger, or None if setup failed
+    """
+    try:
+        session_dir = log_dir / session_id
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        log_file = session_dir / f"{component_type}.log"
+        logger = logging.getLogger(component_type)
+
+        # Avoid duplicate handlers when called twice
+        if any(isinstance(h, logging.FileHandler) and h.baseFilename == str(log_file) for h in logger.handlers):
+            return logger
+
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setLevel(level)
+        file_handler.setFormatter(logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+            "%Y-%m-%d %H:%M:%S"
+        ))
+        logger.addHandler(file_handler)
+        logger.setLevel(level)
+        return logger
+
+    except (OSError, PermissionError) as e:
+        # Log to console if file logging fails
+        console_logger = logging.getLogger(component_type)
+        console_logger.warning(f"Failed to set up file logging for {component_type}: {e}")
+        console_logger.warning(f"Continuing with console logging only")
+        return None

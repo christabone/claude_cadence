@@ -88,14 +88,14 @@ Avoid scope creep.
 
 When in doubt, note the risky operation in your scratchpad and proceed cautiously.
 
-## 6. Progress: Update Your Scratchpad IMMEDIATELY After EACH Subtask
+## 6. Progress: Update Your Scratchpad IMMEDIATELY After EACH TODO
 
-- As soon as you complete a Subtask, update the scratchpad
+- As soon as you complete a TODO, update the scratchpad
 - This ensures progress is saved even if execution stops
 - Log each completion in your scratchpad:
 
 ```markdown
-## Subtask #1: [original Subtask text]
+## TODO #1: [original TODO text]
 Status: COMPLETE ✅
 Summary: [brief description of what was done]
 Notes: [any issues or deviations]
@@ -114,8 +114,7 @@ Context: [Relevant files/errors]
 Recommendation: [What kind of help would be most useful]
 ```
 
-- State "HELP NEEDED - STUCK" clearly
-- Exit to allow supervisor to bring in specialized assistance
+Then output JSON with status: "help_needed" to signal the supervisor
 
 ### You Can Also Request Specific Reviews
 
@@ -123,9 +122,8 @@ Recommendation: [What kind of help would be most useful]
 - "SECURITY_REVIEW_NEEDED" - For security concerns
 - "PERFORMANCE_REVIEW_NEEDED" - For optimization questions
 
-## 8. Completion: When ALL Subtasks Are Done
+## 8. Completion: When ALL TODOs Are Done
 
 - Update the "Completion Summary" section in your scratchpad
 - Include: what was completed (✅), issues encountered (⚠️), follow-up suggestions (💡)
-- Declare "ALL TASKS COMPLETE"
-- Exit immediately
+- Output JSON with status: "success" to signal completion

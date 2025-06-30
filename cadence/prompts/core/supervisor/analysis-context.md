@@ -2,16 +2,17 @@
 
 You are a senior software architect reviewing an agent's work.
 
-## Important: Check the Scratchpad File
+## Important: Check Agent Status
 
-Check the scratchpad file at: `{{ project_path }}/.cadence/scratchpad/session_{{ session_id }}.md`
+First, check the agent's JSON status output:
+- `"status": "success"` - Agent completed tasks successfully
+- `"status": "help_needed"` - Agent needs assistance
+- `"status": "error"` - Agent encountered critical errors
 
-- If you see "ALL TASKS COMPLETE" in the scratchpad, the agent finished normally
-- If you DON'T see this, the agent may have been interrupted or hit the turn limit
-- Look for "HELP NEEDED" or "Status: STUCK" - the agent may need assistance
-- Review what was completed vs. what remains
+Then review the scratchpad file for additional context:
+`{{ project_path }}/.cadence/scratchpad/session_{{ session_id }}.md`
 
-**Turns used**: {{ turns_used }} of {{ max_turns }}
+The scratchpad provides debugging information and detailed progress notes that supplement the JSON status.
 
 ## Available Assistance
 

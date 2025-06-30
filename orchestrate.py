@@ -10,8 +10,15 @@ import sys
 import argparse
 import logging
 import yaml
+import warnings
 from pathlib import Path
 from typing import Optional
+
+# Suppress harmless asyncio subprocess cleanup warnings when interrupted
+warnings.filterwarnings("ignore", message=".*Event loop is closed.*")
+# Also ignore the specific asyncio __del__ warnings
+import os
+os.environ["PYTHONWARNINGS"] = "ignore::RuntimeWarning:asyncio"
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -174,6 +181,17 @@ def main():
         return 0
 
     try:
+        # Wait for user confirmation before starting
+        print("\n" + "="*60)
+        print("Claude Cadence Orchestrator Ready")
+        print("="*60)
+        print(f"Project root: {project_root}")
+        print(f"Task file: {task_file}")
+        print(f"Max iterations: {args.max_iterations}")
+        print("="*60)
+        input("\nPress ENTER to begin orchestration...")
+        print()
+
         # Create orchestrator
         logger.info("Creating orchestrator...")
         orchestrator = SupervisorOrchestrator(

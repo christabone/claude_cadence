@@ -47,6 +47,9 @@ class ExecutionConfig:
     timeout: int = 600
     save_logs: bool = True
     log_dir: str = ".cadence/logs"
+    log_level: str = "DEBUG"  # Log level for file logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    clean_logs_on_startup: bool = True  # Clean up all logs on startup
+    max_log_size_mb: int = 20  # Maximum total size of log directories before cleanup (in MB)
     subprocess_timeout: int = 300  # Timeout for subprocess calls in seconds
     max_scratchpad_retries: int = 5  # Maximum retries for scratchpad creation
 
@@ -55,13 +58,16 @@ class ExecutionConfig:
 @dataclass
 class AgentConfig:
     """Agent execution configuration"""
-    model: str = "claude-3-5-sonnet-20241022"
-    tools: List[str] = field(default_factory=lambda: [
-        "bash", "read", "write", "edit", "grep", "glob", "search",
-        "todo_read", "todo_write", "mcp"
-    ])
-    extra_flags: List[str] = field(default_factory=lambda: ["--dangerously-skip-permissions"])
-    use_continue: bool = False  # Whether to use --continue flag for agent sessions
+    # Default settings for all agents
+    defaults: Dict[str, Any] = field(default_factory=lambda: {
+        "model": "claude-3-5-sonnet-20241022",
+        "tools": ["bash", "read", "write", "edit", "grep", "glob", "search", "mcp"],
+        "extra_flags": ["--dangerously-skip-permissions"],
+        "retry_count": 1,
+        "use_continue": False,
+        "timeout_seconds": 300,
+        "temperature": 0.2
+    })
 
 
 @dataclass
@@ -206,58 +212,6 @@ class PromptsConfig:
     todo_list_header: str = "=== YOUR TODOS ==="
 
 
-@dataclass
-class CircularDependencyConfig:
-    """Configuration for circular dependency detection"""
-    max_file_modifications: int = 3
-    min_attempts_before_check: int = 5
-
-    def __post_init__(self):
-        """Validate configuration values"""
-        if self.max_file_modifications < 1:
-            raise ValueError("max_file_modifications must be positive")
-        if self.min_attempts_before_check < 1:
-            raise ValueError("min_attempts_before_check must be positive")
-
-
-@dataclass
-class FixAgentDispatcherConfig:
-    """Configuration for the Fix Agent Dispatcher"""
-    max_attempts: int = 3
-    timeout_ms: int = DEFAULT_FIX_TIMEOUT_MS
-    enable_auto_fix: bool = True
-    severity_threshold: Literal["low", "medium", "high", "critical"] = "high"
-    enable_verification: bool = True
-    verification_timeout_ms: int = DEFAULT_VERIFICATION_TIMEOUT_MS
-    max_turns: int = 30  # Maximum turns for fix agent execution
-    circular_dependency: CircularDependencyConfig = field(default_factory=CircularDependencyConfig)
-    validation: Dict[str, int] = field(default_factory=lambda: {
-        "min_timeout_ms": MIN_TIMEOUT_MS,
-        "max_timeout_ms": MAX_TIMEOUT_MS
-    })
-
-    def __post_init__(self):
-        """Validate configuration values"""
-        # Validate severity_threshold at runtime
-        valid_severities = get_args(self.__annotations__['severity_threshold'])
-        if self.severity_threshold not in valid_severities:
-            raise ValueError(f"severity_threshold must be one of {valid_severities}, but got '{self.severity_threshold}'")
-
-        # Validate max_attempts with upper bound to prevent DoS
-        if not 1 <= self.max_attempts <= 100:
-            raise ValueError("max_attempts must be between 1 and 100")
-
-        min_timeout = self.validation.get("min_timeout_ms", MIN_TIMEOUT_MS)
-        max_timeout = self.validation.get("max_timeout_ms", MAX_TIMEOUT_MS)
-
-        if self.timeout_ms < min_timeout:
-            raise ValueError(f"timeout_ms must be at least {min_timeout}ms")
-        if self.timeout_ms > max_timeout:
-            raise ValueError(f"timeout_ms must not exceed {max_timeout}ms")
-        if self.verification_timeout_ms < min_timeout:
-            raise ValueError(f"verification_timeout_ms must be at least {min_timeout}ms")
-        if self.verification_timeout_ms > max_timeout:
-            raise ValueError(f"verification_timeout_ms must not exceed {max_timeout}ms")
 
 
 @dataclass
@@ -285,7 +239,7 @@ class CadenceConfig:
     })
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
     file_patterns: FilePatternConfig = field(default_factory=FilePatternConfig)
-    zen_integration: Dict[str, Any] = field(default_factory=lambda: {
+    zen_processing_config: Dict[str, Any] = field(default_factory=lambda: {
         "output_lines_limit": ZEN_OUTPUT_LINES_LIMIT,
         "scratchpad_check_lines": SCRATCHPAD_CHECK_LINES,
         "cutoff_indicator_threshold": CUTOFF_INDICATOR_THRESHOLD,
@@ -304,8 +258,6 @@ class CadenceConfig:
         "pretty_json": True
     })
     orchestration: OrchestrationConfig = field(default_factory=OrchestrationConfig)
-    fix_agent_dispatcher: FixAgentDispatcherConfig = field(default_factory=FixAgentDispatcherConfig)
-    dispatch: Dict[str, Any] = field(default_factory=dict)
     scratchpad_retry: Dict[str, Any] = field(default_factory=dict)
     retry_behavior: Dict[str, Any] = field(default_factory=lambda: {
         "max_json_retries": 3,
@@ -408,7 +360,7 @@ class ConfigLoader:
 
     def _update_dict_configs(self, config: CadenceConfig, data: dict) -> None:
         """Update dictionary configurations with deep merge"""
-        dict_keys = ['project', 'integrations', 'zen_integration', 'processing', 'development', 'retry_behavior', 'dispatch', 'scratchpad_retry']
+        dict_keys = ['project', 'integrations', 'zen_processing_config', 'processing', 'development', 'retry_behavior', 'scratchpad_retry']
         for key in dict_keys:
             if key in data:
                 # For dictionaries, deep merge with defaults instead of replacing
@@ -438,37 +390,26 @@ class ConfigLoader:
             if key in data:
                 self._update_single_dataclass(config, attr_name, config_class, data[key])
 
-        # Special handling for fix_agent_dispatcher
-        if 'fix_agent_dispatcher' in data:
-            self._update_fix_agent_dispatcher(config, data['fix_agent_dispatcher'])
 
     def _update_single_dataclass(self, config: CadenceConfig, attr_name: str,
                                   config_class: type, data: dict) -> None:
         """Update a single dataclass configuration with error handling"""
         try:
-            setattr(config, attr_name, config_class(**data))
+            # Handle nested dataclasses (e.g., SupervisorConfig with ZenIntegrationConfig)
+            processed_data = data.copy()
+
+            # Special handling for SupervisorConfig with nested zen_integration
+            if config_class == SupervisorConfig and 'zen_integration' in processed_data:
+                zen_data = processed_data['zen_integration']
+                if isinstance(zen_data, dict):
+                    processed_data['zen_integration'] = ZenIntegrationConfig(**zen_data)
+
+            setattr(config, attr_name, config_class(**processed_data))
         except (TypeError, ValueError) as e:
             logger = logging.getLogger(__name__)
             logger.warning(f"Invalid {attr_name} config: {e}. Using defaults.")
             setattr(config, attr_name, config_class())
 
-    def _update_fix_agent_dispatcher(self, config: CadenceConfig, data: dict) -> None:
-        """Update fix_agent_dispatcher config with nested dataclass handling"""
-        try:
-            fad_data = data.copy()
-            if 'circular_dependency' in fad_data:
-                # Handle nested dataclass
-                try:
-                    fad_data['circular_dependency'] = CircularDependencyConfig(**fad_data['circular_dependency'])
-                except (TypeError, ValueError) as e:
-                    logger = logging.getLogger(__name__)
-                    logger.warning(f"Invalid circular_dependency config: {e}. Using defaults.")
-                    fad_data['circular_dependency'] = CircularDependencyConfig()
-            config.fix_agent_dispatcher = FixAgentDispatcherConfig(**fad_data)
-        except (TypeError, ValueError) as e:
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Invalid fix_agent_dispatcher config: {e}. Using defaults.")
-            config.fix_agent_dispatcher = FixAgentDispatcherConfig()
 
     def get_tool_command_flags(self) -> List[str]:
         """Get tool-related command line flags for claude CLI"""
@@ -503,11 +444,10 @@ class ConfigLoader:
             "supervisor": self._dataclass_to_dict(self.config.supervisor),
             "task_detection": self._dataclass_to_dict(self.config.task_detection),
             "orchestration": self._dataclass_to_dict(self.config.orchestration),
-            "fix_agent_dispatcher": self._dataclass_to_dict(self.config.fix_agent_dispatcher),
             "session": self.config.session,
             "integrations": self.config.integrations,
             "prompts": self.config.prompts,
-            "zen_integration": self.config.zen_integration,
+            "zen_processing_config": self.config.zen_processing_config,
             "processing": self.config.processing,
             "development": self.config.development,
             "retry_behavior": self.config.retry_behavior
@@ -544,11 +484,6 @@ class ConfigLoader:
             'orchestration.supervisor_dir': str,
             'orchestration.agent_dir': str,
 
-            # Fix agent dispatcher settings
-            'fix_agent_dispatcher.max_fix_iterations': int,
-            'fix_agent_dispatcher.fix_iteration_limit': int,
-            'fix_agent_dispatcher.timeout_seconds': int,
-            'fix_agent_dispatcher.enable_logging': bool,
         }
 
         # Handle nested overrides with validation

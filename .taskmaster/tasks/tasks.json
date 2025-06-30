@@ -3,122 +3,108 @@
     "tasks": [
       {
         "id": 1,
-        "title": "Extract hardcoded retry values to config.yaml",
-        "description": "Move hardcoded retry configuration values from orchestrator.py to config.yaml for centralized configuration management",
-        "details": "Identify and move max_json_retries (line 1329) and max_turns values from orchestrator.py to config.yaml. Create a retry_behavior section in config.yaml with appropriate default values. Update orchestrator.py to read these values from the configuration instead of using hardcoded constants. Ensure backward compatibility and proper error handling if config values are missing.",
-        "testStrategy": "Verify that orchestrator.py correctly reads retry values from config.yaml. Test with missing config values to ensure graceful fallbacks. Validate that retry behavior remains consistent with previous hardcoded implementation.",
+        "title": "Implement get_supported_species Tool Core Functionality",
+        "description": "Create the metadata_tools.py module with Species data model and get_supported_species tool function",
+        "details": "Create src/agr_mcp/tools/metadata_tools.py file. Define Pydantic BaseModel 'Species' with fields: taxon_id (alias 'taxonId'), scientific_name (alias 'name'), and display_name (alias 'displayName'). Implement async function get_supported_species() that makes GET request to https://www.alliancegenome.org/api/species/list using httpx.AsyncClient, parses JSON response into list[Species], handles HTTP errors appropriately. Decorate function with @tool decorator specifying name and description.",
+        "testStrategy": "Create unit tests in tests/tools/test_metadata_tools.py using pytest and pytest-mock. Mock httpx.AsyncClient.get to return sample species data. Verify function returns correct list of Species objects with proper field mapping.",
         "priority": "high",
         "dependencies": [],
-        "status": "done",
-        "subtasks": []
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create metadata_tools.py module and Species data model",
+            "description": "Create the src/agr_mcp/tools/metadata_tools.py file and implement the Species Pydantic model with proper field aliases",
+            "dependencies": [],
+            "details": "Create the file src/agr_mcp/tools/metadata_tools.py. Import necessary modules (pydantic BaseModel, Field). Define Species class inheriting from BaseModel with three fields: taxon_id (with alias 'taxonId'), scientific_name (with alias 'name'), and display_name (with alias 'displayName'). Use proper type hints and Field aliases for JSON mapping.",
+            "status": "pending",
+            "testStrategy": "Unit tests for Species model instantiation and serialization with aliased fields"
+          },
+          {
+            "id": 2,
+            "title": "Implement basic get_supported_species function structure",
+            "description": "Create the async get_supported_species function with proper imports and basic structure",
+            "dependencies": [
+              1
+            ],
+            "details": "Import httpx, @tool decorator, and other required modules. Define async function get_supported_species() with @tool decorator specifying name='get_supported_species' and appropriate description. Set up basic function signature returning list[Species]. Add docstring explaining the function purpose.",
+            "status": "pending",
+            "testStrategy": "Test function decorator and signature validation"
+          },
+          {
+            "id": 3,
+            "title": "Implement HTTP request logic with httpx",
+            "description": "Add the HTTP request functionality to fetch species data from Alliance API",
+            "dependencies": [
+              2
+            ],
+            "details": "Inside get_supported_species function, create httpx.AsyncClient context manager. Make GET request to 'https://www.alliancegenome.org/api/species/list'. Handle response.raise_for_status() for HTTP error checking. Parse JSON response using response.json().",
+            "status": "pending",
+            "testStrategy": "Mock HTTP requests to test API interaction and error handling"
+          },
+          {
+            "id": 4,
+            "title": "Implement response parsing and error handling",
+            "description": "Complete the function by parsing JSON response into Species objects and adding comprehensive error handling",
+            "dependencies": [
+              3
+            ],
+            "details": "Parse the JSON response into list[Species] by iterating through response data and creating Species instances. Add try-catch blocks for HTTP errors, JSON parsing errors, and validation errors. Return the list of Species objects. Ensure proper exception handling with meaningful error messages.",
+            "status": "pending",
+            "testStrategy": "Test with various response scenarios including successful responses, HTTP errors, malformed JSON, and invalid species data"
+          }
+        ]
       },
       {
         "id": 2,
-        "title": "Create retry behavior configuration section",
-        "description": "Add comprehensive retry_behavior section to config.yaml with configurable settings for max_retries, backoff strategy, and delays",
-        "details": "Design and implement a comprehensive retry_behavior configuration section in config.yaml. Include settings for max_retries, backoff_strategy (linear/exponential), base_delay, max_delay, and component-specific overrides. Structure the configuration to allow different retry behaviors for different components (JSON parsing, MCP calls, file operations). Add schema validation and documentation comments in the YAML file.",
-        "testStrategy": "Validate YAML syntax and structure. Test configuration loading with various retry scenarios. Verify that different components can access their specific retry configurations. Test with invalid configuration values to ensure proper error handling.",
-        "priority": "high",
+        "title": "Register Tool and Update Documentation",
+        "description": "Integrate the new tool into the MCP server and update project documentation",
+        "details": "In src/agr_mcp/server.py, add import statement for get_supported_species from agr_mcp.tools.metadata_tools. Register the tool by adding server.register(get_supported_species) call within the create_server() function. Update README.md to include get_supported_species in the 'Available Tools' section with brief description of its functionality.",
+        "testStrategy": "Verify tool is properly registered by testing MCP server startup and tool availability. Confirm documentation accurately reflects the new tool's purpose and usage.",
+        "priority": "medium",
         "dependencies": [
           1
         ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 3,
-        "title": "Implement retry delays in retry_utils.py",
-        "description": "Add time.sleep() delays with configurable backoff strategy to prevent retry storms",
-        "details": "Enhance retry_utils.py to implement configurable delay mechanisms between retry attempts. Add linear backoff (2 * attempt seconds) as default with support for exponential backoff. Read delay configuration from config.yaml retry_behavior section. Implement maximum delay caps to prevent excessive wait times. Add logging for retry delays to improve debugging visibility.",
-        "testStrategy": "Test retry delays with different backoff strategies. Verify that delays scale appropriately with attempt numbers. Test maximum delay caps. Measure actual delay times to ensure accuracy. Test with zero delay configuration for fast testing scenarios.",
-        "priority": "high",
-        "dependencies": [
-          2
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 4,
-        "title": "Add type annotation for retry_callback",
-        "description": "Add proper type hints for retry_callback parameter in retry_utils.py to improve code clarity and IDE support",
-        "details": "Add comprehensive type annotations to retry_utils.py, specifically for the retry_callback parameter. Define the type as Optional[Callable[[str, int], str]] where the callback receives error message and attempt number, returning a modified message. Import necessary typing modules (Optional, Callable). Ensure all function signatures in retry_utils.py have proper type hints for better code maintainability.",
-        "testStrategy": "Run mypy or similar type checker to validate type annotations. Test with various callback functions to ensure type compatibility. Verify IDE auto-completion and type checking work correctly. Test with None callback to ensure Optional handling works.",
-        "priority": "medium",
-        "dependencies": [
-          3
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 5,
-        "title": "Complete error logging in code_review_agent.py",
-        "description": "Enhance error logging to include actual JSON parsing error details instead of generic messages",
-        "details": "Locate the generic error logging at line 340 in code_review_agent.py and enhance it to include the actual JSON parsing error details. Modify the log message to include the original exception message, the problematic JSON content (truncated if necessary), and the attempt number. Add structured logging with appropriate log levels (ERROR for final failures, WARNING for retry attempts). Ensure sensitive information is not logged.",
-        "testStrategy": "Trigger JSON parsing errors intentionally and verify detailed error messages are logged. Test with various types of malformed JSON to ensure comprehensive error reporting. Verify log messages are helpful for debugging without exposing sensitive data.",
-        "priority": "medium",
-        "dependencies": [],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 6,
-        "title": "Improve TypeError handling in save_json_with_retry",
-        "description": "Fix ineffective TypeError retry logic in save_json_with_retry by adding proper handling for non-serializable data",
-        "details": "Analyze the TypeError retry logic in save_json_with_retry function. Since TypeError typically indicates non-serializable data that won't be fixed by retry, implement proper data sanitization or conversion before retrying. Add specific handling for common non-serializable types (datetime, custom objects, etc.). Consider using a custom JSON encoder or data preprocessing step. If the data truly cannot be serialized, fail fast instead of ineffective retries.",
-        "testStrategy": "Test with various non-serializable data types (datetime, custom objects, functions). Verify that data sanitization works correctly. Test retry behavior with temporary vs permanent serialization issues. Ensure the function fails gracefully for truly non-serializable data.",
-        "priority": "medium",
-        "dependencies": [
-          4
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 7,
-        "title": "Clean up ineffective retry call in code_review_agent.py",
-        "description": "Remove parse_json_with_retry call at line 317 since MCP responses don't need retry and replace with proper error handling",
-        "details": "Remove the parse_json_with_retry call at line 317 in code_review_agent.py since MCP (Model Context Protocol) responses are typically reliable and don't benefit from JSON parsing retries. Replace with a simple json.loads() call wrapped in proper try-catch error handling. Add specific error messages for JSON parsing failures that indicate the source of the problem. Ensure the error handling is appropriate for the MCP response context.",
-        "testStrategy": "Test MCP response parsing with valid JSON responses. Test error handling with malformed MCP responses. Verify that removal of retry logic doesn't negatively impact functionality. Confirm error messages are clear and actionable.",
-        "priority": "medium",
-        "dependencies": [
-          5
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 8,
-        "title": "Refactor duplicate retry logic in orchestrator.py",
-        "description": "Consolidate duplicate retry logic in run_supervisor_analysis and run_fix_agent methods using the enhanced retry utilities",
-        "details": "Identify and extract the common retry patterns from run_supervisor_analysis and run_fix_agent methods in orchestrator.py. Create reusable helper functions or utilize the enhanced retry_utils.py functions to eliminate code duplication. Maintain the existing functionality while reducing code complexity. Since this was previously marked as 'hobby-level', implement only if it provides clear maintainability benefits without over-engineering.",
-        "testStrategy": "Verify that both run_supervisor_analysis and run_fix_agent methods maintain identical behavior after refactoring. Test various failure scenarios to ensure retry logic works consistently. Compare execution times and behavior before and after refactoring.",
-        "priority": "low",
-        "dependencies": [
-          6
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 9,
-        "title": "Execute final code review with gemini-2.5-pro",
-        "description": "Run comprehensive code review after all fixes are complete to validate issue resolution and identify any new problems",
-        "details": "Set up and execute a comprehensive code review using gemini-2.5-pro on the modified codebase. Focus on the retry implementation, error handling, and configuration management changes. Create a systematic review checklist based on the original issues identified. Document the review process and results. Verify that all original issues have been properly addressed and no new issues were introduced. Generate a final report comparing before and after states.",
-        "testStrategy": "Compare the final code review results with the original issue list. Verify that all identified problems have been resolved. Test the overall system functionality to ensure no regressions were introduced. Document any remaining issues or recommendations for future improvements.",
-        "priority": "high",
-        "dependencies": [
-          7,
-          8
-        ],
-        "status": "in-progress",
-        "subtasks": []
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Import and register get_supported_species tool in MCP server",
+            "description": "Add the import statement and register the new tool in the server configuration",
+            "dependencies": [],
+            "details": "In src/agr_mcp/server.py: 1) Add 'from agr_mcp.tools.metadata_tools import get_supported_species' to the import section at the top of the file. 2) Locate the create_server() function and add 'server.register(get_supported_species)' call within the function to register the tool with the MCP server.",
+            "status": "pending",
+            "testStrategy": "Verify the server starts without import errors and the tool is accessible via MCP client"
+          },
+          {
+            "id": 2,
+            "title": "Update README.md with new tool documentation",
+            "description": "Add get_supported_species to the Available Tools section with description",
+            "dependencies": [
+              1
+            ],
+            "details": "In README.md: 1) Locate the 'Available Tools' section. 2) Add a new entry for 'get_supported_species' with a brief description such as 'Retrieves list of supported species from Alliance API with their names and taxonomic IDs'. 3) Ensure the formatting matches existing tool entries in the documentation.",
+            "status": "pending",
+            "testStrategy": "Review README.md to ensure the new tool entry is properly formatted and provides clear information to users"
+          },
+          {
+            "id": 3,
+            "title": "Test integration and validate tool availability",
+            "description": "Verify the tool is properly integrated and accessible through the MCP server",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "1) Start the MCP server and verify no errors occur during startup. 2) Test that the get_supported_species tool can be called successfully through the MCP interface. 3) Verify the tool returns expected species data from the Alliance API. 4) Check that the tool appears in any tool listing or discovery mechanisms.",
+            "status": "pending",
+            "testStrategy": "Manual testing of MCP server startup and tool invocation, plus verification that the tool responds with valid species data"
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-06-21T22:40:58.616Z",
-      "updated": "2025-06-28T23:27:05.853Z",
+      "updated": "2025-06-29T16:01:11.440Z",
       "description": "Tasks for master context"
     }
   }

@@ -84,6 +84,20 @@ After analyzing the tasks, output ONLY a JSON object (no other text).
 }
 ```
 
+6. **"code_review"** - When all subtasks complete and code review is pending:
+```json
+{
+    "action": "code_review",
+    "task_id": "1.2",
+    "task_title": "Implement user authentication",
+    "review_scope": "task",
+    "files_to_review": ["src/auth.py", "src/models/user.py"],
+    "supervisor_findings": "Identified potential security concerns in password handling",
+    "session_id": "{{ session_id }}",
+    "reason": "All subtasks completed, initiating code review per configuration"
+}
+```
+
 ## Important Guidelines
 
 ### Remember
