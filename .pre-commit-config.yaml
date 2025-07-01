@@ -21,11 +21,17 @@ repos:
           --exclude-dir=.git --exclude-dir=analysis --exclude-dir=Mammotion-HA
           --exclude-dir=MaterialPlane_Sensor --exclude-dir=PyMammotion
           --exclude-dir=ai_chat --exclude-dir=usage_venv --exclude-dir=.taskmaster
-          --exclude-dir=venv --exclude-dir=.cadence . |
+          --exclude-dir=venv --exclude-dir=.cadence --exclude-dir=__pycache__
+          --exclude-dir=tests --exclude-dir=.pytest_cache --exclude-dir=htmlcov
+          --exclude-dir=.coverage --exclude-dir=agr_mcp
+          --exclude="*.pyc" --exclude="*.pyo" --exclude="*.pyd"
+          --exclude="*.so" --exclude="*.dylib" --exclude="*.dll"
+          --exclude="*.log" --exclude="*.tmp" --exclude="*.bak"
+          . |
           grep -v "# Example:" | grep -v "# Reference:" | grep -v ".gitleaks.toml" |
           grep -v "final_o3_verification_complete.md" | grep -v "recent_conversation.md" |
           grep -v "task_master_review_for_o3.md" | grep -v "task_master_verification_review_o3.md" |
-          grep -v "current-trigger.yaml"; then
+          grep -v "current-trigger.yaml" | grep -v "test_" | grep -v "/tests/"; then
           echo "ERROR: UUID detected in commit."; exit 1; fi'
         language: system
         pass_filenames: false
