@@ -343,4 +343,3 @@ If you use Claude Cadence in your research or projects, please cite:
   url = {https://github.com/christabone/claude_cadence}
 }
 ```
-# Test comment
