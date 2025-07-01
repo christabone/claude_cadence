@@ -1,0 +1,427 @@
+# Claude Cadence Prompt Configuration
+# This file defines all prompts used in the task-driven supervision system
+# NOTE: This file uses custom !include tags that are parsed by PromptLoader, not standard YAML
+
+# Serena MCP activation instructions
+serena_setup: !include prompts/core/setup/serena-activation.md
+
+# Core context that appears in ALL agent prompts (initial and continuation)
+core_agent_context:
+  supervised_context: "{{ shared_agent_context.supervision_explanation }}"
+  serena_activation: "{{ serena_setup }}"
+  safety_notice: "{{ safety_notice_section }}"
+  guidelines: "{{ shared_agent_context.work_guidelines }}"
+  exit_protocol: "{{ shared_agent_context.early_exit_protocol }}"
+
+# Shared context that appears in all agent prompts
+shared_agent_context:
+  supervision_explanation: |
+    === SUPERVISED AGENT CONTEXT ===
+    You are an AI agent operating under the Claude Cadence supervision system.
+    Your role: Complete assigned TODOs efficiently and report back to your supervisor.
+
+    How this works:
+    - A supervisor has analyzed the user's needs and created specific TODOs for you
+    - You focus ONLY on completing these TODOs
+    - When done, you declare completion and provide a summary
+    - The supervisor will review your work and may assign follow-up tasks
+
+    Safety limit: Maximum {{ max_turns }} turns (this is NOT a target - most tasks complete much sooner)
+
+  work_guidelines: !include prompts/core/guidelines/work-execution.md
+
+  early_exit_protocol: !include prompts/core/context/completion-protocol.md
+
+# Standalone safety notice section
+safety_notice_section: !include prompts/core/safety/safety-notice.md
+
+# Agent-specific zen reminders
+agent_zen_reminder: !include prompts/core/context/zen-reminder.md
+
+# Agent JSON output format instructions
+agent_output_format: !include prompts/core/templates/agent-output-format.md
+
+# Initial agent prompt template
+agent_prompts:
+  initial:
+    sections:
+      # Include all core context
+      - "{{ core_agent_context.supervised_context }}"
+      - "{{ core_agent_context.safety_notice }}"
+      - |
+        === PROJECT INFORMATION ===
+        Project Root Directory: {{ project_path }}
+        Working Directory: {{ project_path }}
+      - "{{ core_agent_context.guidelines }}"
+      - "{{ core_agent_context.exit_protocol }}"
+      # Initial-specific sections
+      - "{{ todo_list }}"  # Generated dynamically
+      - |
+        === BEGIN WORK ===
+        1. FIRST: Create your scratchpad file at {{ project_path }}/.cadence/scratchpad/session_{{ session_id }}.md
+        2. Work through TODOs systematically, updating your scratchpad as you go
+        3. Remember: You're part of a supervised workflow. Focus on your assigned tasks.
+        4. Quality and safety are more important than speed.
+
+        Begin now by creating your scratchpad, then start TODO #1.
+
+  # Continuation prompt for resumed execution
+  continuation:
+    sections:
+      # Include all core context (same as initial) - CRITICAL for safety and alignment
+      - "{{ core_agent_context.supervised_context }}"
+      - "{{ core_agent_context.safety_notice }}"
+      - |
+        === PROJECT INFORMATION ===
+        Project Root Directory: {{ project_path }}
+        Working Directory: {{ project_path }}
+      - "{{ core_agent_context.guidelines }}"
+      - "{{ core_agent_context.exit_protocol }}"
+      # Continuation-specific sections
+      - |
+        === CONTINUATION CONTEXT ===
+        {{ continuation_type }}
+        Session ID: {{ session_id }}
+        Previous scratchpad: {{ project_path }}/.cadence/scratchpad/session_{{ previous_session_id }}.md
+        Current scratchpad: {{ project_path }}/.cadence/scratchpad/session_{{ session_id }}.md
+      - "{{ supervisor_analysis }}"  # Dynamic based on completion status
+      - "{{ task_status_section }}"  # Shows completed vs remaining
+      - "{{ remaining_todos }}"  # Updated TODO list
+      - |
+        === YOUR NEXT STEPS ===
+        {{ next_steps_guidance }}
+
+        Continue by updating your NEW scratchpad file, then proceed with the work.
+
+  # Fix issues prompt for code review feedback
+  fix_issues:
+    sections:
+      - "{{ core_agent_context.supervised_context }}"
+      - "{{ core_agent_context.safety_notice }}"
+      - |
+        === PROJECT INFORMATION ===
+        Project Root Directory: {{ project_path }}
+        Working Directory: {{ project_path }}
+      - "{{ core_agent_context.guidelines }}"
+      - "{{ core_agent_context.exit_protocol }}"
+      - |
+        === CODE REVIEW FEEDBACK: ISSUES TO FIX ===
+        The following issues were identified in the code review:
+
+        {{ code_review_issues }}
+
+        === YOUR TASK ===
+        1. Fix each issue systematically
+        2. Test your fixes
+        3. Update your scratchpad with what you fixed
+        4. Output JSON status when complete
+
+  # JSON fix retry prompt for invalid JSON output
+  json_fix_retry: |
+    URGENT: Your previous response was not valid JSON.
+
+    Your last response ended with:
+    {{ invalid_output }}
+
+    Provide ONLY the corrected JSON output following this exact format:
+    {
+      "status": "success" | "help_needed" | "error",
+      "session_id": "{{ session_id }}",
+      "summary": "Brief summary",
+      "execution_notes": "Details"
+    }
+
+# TODO-specific templates
+todo_templates:
+  todo_list: |
+    === YOUR TODOS ===
+    Session ID: {{ session_id }}
+    Task Master References: {{ task_numbers }}
+
+    The following TODOs need to be completed:
+
+    {{ todo_items }}
+
+    REMEMBER: First create your scratchpad at {{ project_path }}/.cadence/scratchpad/session_{{ session_id }}.md
+    Focus on completing these systematically.
+    When all are done, update your scratchpad and state 'ALL TASKS COMPLETE'.
+
+  todo_item: "{{ number }}. {{ todo_text }}"
+
+  # Scratchpad retry prompt for when agent fails to create scratchpad
+  scratchpad_retry: |
+    URGENT: You are being re-run because you failed to create your scratchpad file.
+
+    Your ONLY task right now is to create the required scratchpad file at the correct absolute path:
+    1. Create directory (if it doesn't exist): {{ project_path }}/.cadence/scratchpad/
+    2. Create file: {{ project_path }}/.cadence/scratchpad/session_{{ session_id }}.md
+    3. Include this exact content:
+
+    ```
+    # Task Execution Scratchpad
+    Session ID: {{ session_id }}
+    Task ID: {{ task_id }}
+    Created: {{ timestamp }}
+    Status: SCRATCHPAD_CREATED
+
+    ## Notes
+    This scratchpad was created during a retry because the initial agent run failed to create it.
+
+    ## Completion
+    SCRATCHPAD CREATION COMPLETE
+    ```
+
+    CRITICAL: Use the exact absolute paths provided above. The file MUST be created at: {{ project_path }}/.cadence/scratchpad/session_{{ session_id }}.md
+
+    !include core/templates/agent-output-format.md
+
+  progress_summary: |
+    === COMPLETED WORK ===
+    The following has been accomplished:
+    {{ completed_items }}
+
+  remaining_work: |
+    === REMAINING WORK ===
+    Still need to complete:
+    {{ remaining_items }}
+
+  # Dynamic supervisor analysis sections
+  supervisor_incomplete_analysis: |
+    === SUPERVISOR ANALYSIS: INCOMPLETE EXECUTION ===
+    Your previous execution ended before completing all tasks.
+
+    Review of previous work:
+    {{ previous_work_summary }}
+
+    Issues identified:
+    {{ issues_found }}
+
+    Guidance for continuation:
+    {{ specific_guidance }}
+
+  supervisor_complete_analysis: |
+    === SUPERVISOR ANALYSIS: PREVIOUS TASKS COMPLETE ===
+    Excellent! You successfully completed the previous set of TODOs.
+
+    Summary of completed work:
+    {{ previous_work_summary }}
+
+    New objectives:
+    {{ new_objectives }}
+
+  continuation_types:
+    incomplete: "You are resuming an incomplete task execution."
+    complete_new_tasks: "Previous tasks were completed. You have new TODOs to work on."
+    fixing_issues: "You are addressing issues found in the previous execution."
+
+  issues_section: |
+    === ISSUES TO ADDRESS ===
+    {{ issue_list }}
+
+# Supervisor analysis prompts
+supervisor_prompts:
+  # Orchestrator supervisor prompt that uses Task Master MCP
+  orchestrator_taskmaster:
+    base_prompt: !include prompts/core/instructions/orchestrator-taskmaster.md
+
+    code_review_sections:
+      task: !include prompts/core/instructions/code-review-task.md
+
+      project: !include prompts/core/instructions/code-review-project.md
+
+      none: ""
+
+    code_review_pending_section: |
+      {% if code_review_pending %}
+
+      === CODE REVIEW REQUIRED ===
+      The agent has successfully completed a task, and the system is configured for code review after each task.
+
+      **YOUR PRIORITY**: Before analyzing the next task, you MUST:
+
+      1. **First verify all subtasks are actually complete**:
+         - Check Task Master to confirm ALL subtasks show status "done"
+         - If any subtasks remain pending/in-progress, return "execute" action to complete them
+         - Only proceed with code review if truly all subtasks are complete
+
+      2. **Perform comprehensive code review using zen tools**:
+         - Use `mcp__zen__codereview` to analyze the files modified by the agent
+         - Review for: security vulnerabilities, bugs, performance issues, code quality
+         - Focus on the task requirements and implementation correctness
+         - Pay attention to the severity levels reported by the review
+
+      3. **Act on the code review results** (always return "execute" action):
+         - **If CRITICAL or HIGH severity issues found**:
+           * Set the completed subtasks back to "pending" status using Task Master
+           * Return "execute" action with specific fix instructions addressing the review findings
+         - **If MEDIUM/LOW issues or no issues**:
+           * Keep current task marked as "done"
+           * Return "execute" action to proceed to the next available task/subtask
+         - Always include clear guidance about any issues that need to be addressed
+
+      {% endif %}
+
+
+    zen_guidance: |
+
+      WHEN TO USE ZEN TOOLS:
+      Consider calling Zen tools directly when:
+      - The agent explicitly requested help ("HELP NEEDED", "Status: STUCK")
+      - The task involves complex debugging that might require external expertise
+      - Architecture decisions need validation before implementation
+      - Security-critical features need review before coding
+      - Performance optimization requires analysis
+      - The agent has repeatedly failed with similar errors
+      {% if has_previous_agent_result and not agent_completed_normally %}
+      - The agent was cut off at the turn limit (use zen analyze)
+      - You need help understanding what the agent completed
+      {% endif %}
+
+      {% if has_previous_agent_result and not agent_completed_normally %}
+      SPECIAL HANDLING FOR INCOMPLETE RUNS:
+      Since the agent didn't complete normally, consider using zen analysis:
+
+      1. Call zen analyze for cutoff analysis:
+         mcp__zen__analyze with model="{{ zen_processing_config.analyze_model }}" (use full {{ zen_processing_config.analyze_model }}, NOT o3-mini)
+         - Present ONLY factual information:
+           * Agent was cut off at {{ max_turns }} turn limit
+           * List what TODOs were assigned
+           * List what was completed based on scratchpad/logs
+           * List what remains incomplete
+           * DO NOT interpret or judge the agent's performance
+         - Get unbiased recommendations on how to proceed
+
+      2. Based on zen analysis, decide whether to:
+         - Re-dispatch agent with remaining work
+         - Call zen debug for specific blockers
+         - Skip the task temporarily
+         - Break down the task differently
+
+      3. If re-dispatching, include zen's guidance in your instructions
+      {% endif %}
+
+      CRITICAL GUIDANCE FOR ZEN USAGE:
+      !include prompts/core/context/zen-guidance.md
+
+    output_format: !include prompts/core/templates/output-format.md
+
+  analysis:
+    sections:
+      - !include prompts/core/supervisor/analysis-context.md
+      - |
+        === PROJECT INFORMATION ===
+        Project Root Directory: {{ project_path }}
+        Working Directory: {{ project_path }}
+      - |
+        === ORIGINAL OBJECTIVE ===
+        {{ original_task }}
+      - "{{ task_progress }}"  # Generated if tasks exist
+      - "{{ execution_history }}"  # Generated from previous executions
+      - |
+        === EXECUTION OUTPUT TO ANALYZE ===
+        {{ execution_output }}
+      - !include prompts/core/supervisor/analysis-required.md
+
+  task_progress_template: |
+    === TASK PROGRESS ===
+    Completed: {{ completed_count }} tasks
+    Remaining: {{ remaining_count }} tasks
+
+  execution_history_template: |
+    === EXECUTION HISTORY ===
+    {{ history_items }}
+
+  history_item: "Execution {{ num }}: {{ summary }}"
+
+# Code Review prompts
+code_review_prompts:
+  agent_review: |
+    === CODE REVIEW TASK ===
+
+    You are performing a code review for task {{ task_id }}: {{ task_title }}
+
+    **Project Root**: {{ project_path }}
+    **Session ID**: {{ session_id }}
+
+    **YOUR TASK**:
+    Review the code changes that were made to complete this task. Focus on:
+
+    1. **Security**: Look for vulnerabilities, exposed secrets, injection risks, etc.
+    2. **Performance**: Identify inefficient algorithms, memory leaks, blocking operations
+    3. **Code Quality**: Check for maintainability, readability, proper error handling
+    4. **Correctness**: Verify the implementation meets the task requirements
+    5. **Best Practices**: Ensure adherence to language/framework conventions
+
+    **APPROACH**:
+    1. First, check Task Master to understand what subtasks were completed
+    2. Read the relevant files that were modified
+    3. Analyze the implementation systematically
+    4. Document your findings clearly
+
+    **OUTPUT**:
+    Create a structured review with:
+    - Summary of what was implemented
+    - Critical issues that MUST be fixed (if any)
+    - Suggestions for improvement (nice to have)
+    - Overall assessment
+
+    Be constructive but thorough. Focus on significant issues that affect functionality, security, or maintainability.
+
+# Final summary template
+final_summary:
+  template: !include prompts/core/templates/final-summary.md
+
+  completed_section: |
+    === COMPLETED TASKS ===
+    {{ completed_list }}
+
+  incomplete_section: |
+    === INCOMPLETE TASKS ===
+    {{ incomplete_list }}
+
+  recommendations: |
+    === RECOMMENDATIONS ===
+    Consider running another supervision session to complete remaining tasks.
+    Alternatively, continue manually with the following focus:
+    {{ focus_items }}
+
+# Task Supervisor specific templates (replacing PromptBuilder methods)
+task_supervisor:
+  # Replaces PromptBuilder.build_supervisor_analysis_prompt()
+  analysis_prompt: |
+    {{ context }}
+
+    Analyze the situation and provide:
+    1. Whether the agent should execute these TODOs (should_execute: true/false)
+    2. Specific guidance for the agent to complete these subtasks successfully
+    3. Your reasoning for this decision
+    4. Whether zen assistance might be helpful (needs_assistance: true/false)
+
+    Consider:
+    - The complexity and nature of the subtasks
+    - Any previous execution results and errors
+    - The best approach for the agent to succeed
+    - Whether the subtasks are clear and well-defined
+    {% if include_json_format %}
+
+    Respond in JSON format with keys: should_execute, guidance, reasoning, needs_assistance
+    {% endif %}
+
+  # Replaces PromptBuilder.build_task_context()
+  task_context: |
+    You are a supervisor analyzing the current state of task execution.
+
+    Current Task: {{ task_id }} - {{ title }}
+    Status: {{ completed_subtask_count }}/{{ total_subtasks }} subtasks complete
+
+    Remaining TODOs:
+    {{ todos_list }}
+
+  # Replaces PromptBuilder.format_execution_results()
+  execution_results: |
+    Previous Execution Results:
+    - Success: {{ success }}
+    - Execution Time: {{ execution_time:.2f }}s
+    - Completed Normally: {{ completed_normally }}
+    - Requested Help: {{ requested_help }}
+    - Errors: {{ error_count }}
