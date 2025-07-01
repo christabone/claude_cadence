@@ -58,9 +58,9 @@ The server provides the following tools:
 - `search_genes`: Search for genes by symbol, name, or identifier
 - `get_gene_details`: Retrieve detailed information about a specific gene
 - `find_orthologs`: Find orthologous genes across species
-- `get_disease_associations`: Query gene-disease relationships
-- `search_alleles`: Search for alleles and variants
-- `get_expression_data`: Access gene expression information
+- `download_data`: Download AGR data files (genes, alleles, disease, expression, orthology)
+- `get_api_schema`: Get AGR API schema information
+- `get_supported_species`: Get list of supported species from Alliance Genome Resources with their names and taxonomic IDs
 
 ### Example Usage
 

@@ -280,7 +280,11 @@ class UnifiedAgent:
         # Use the prompt as-is (no custom prefix needed)
         full_prompt = prompt
 
-        logger.info("Agent execution starting")
+        # Log start with consistent formatting (matching supervisor style)
+        continue_status = "with --continue" if continue_session else "without --continue"
+        logger.info("=" * 60)
+        logger.info(f"AGENT STARTING... [{continue_status}]")
+        logger.info("=" * 60)
 
         try:
             # Execute the agent (no retry loop)

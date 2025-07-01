@@ -56,12 +56,33 @@ These would break functionality:
 
 ## Actions Based on Review Results
 
-### If Reviews Identify CRITICAL Issues
-* Update task status back to "in-progress"
-* Return action: "execute" with SPECIFIC guidance limited to fixing critical issues
-* Keep guidance focused: "Fix the SQL injection vulnerability in login function"
+### CRITICAL: Code Review Issue Resolution
 
-### If NO CRITICAL Issues (Only Suggestions/Improvements)
+When code reviews identify CRITICAL or HIGH severity issues:
+
+1. **MANDATORY**: You MUST return action "execute" with:
+   - The SAME task_id that just completed (MAIN TASK NUMBER ONLY, e.g., "1", "2", NOT subtask IDs like "1.1")
+   - Subtasks reset to "pending" status if needed
+   - Guidance specifically addressing each CRITICAL/HIGH issue
+   - Clear instructions like: "Fix the following critical issues identified in code review:
+     1. Add response.raise_for_status() after HTTP request (line 60)
+     2. Add specific exception handling for JSONDecodeError
+     3. Replace broad Exception catches with specific exceptions"
+
+2. **NEVER** proceed to the next task when CRITICAL/HIGH issues exist
+
+3. **Detection**: Look for these severity indicators in code review output:
+   - 🔴 CRITICAL or "CRITICAL -"
+   - 🟠 HIGH or "HIGH Priority"
+   - Lines containing "severity": "critical" or "severity": "high"
+
+### If Reviews Identify CRITICAL/HIGH Issues
+* Update task status back to "in-progress": `mcp__taskmaster-ai__set_task_status --id=<task_id> --status=in-progress --projectRoot={{ project_path }}`
+* Return action: "execute" with the SAME task_id
+* Provide SPECIFIC guidance listing each critical/high issue to fix
+* DO NOT move to the next task
+
+### If NO CRITICAL/HIGH Issues (Only Medium/Low/Suggestions)
 * Task remains "done"
 * Save all review suggestions to `.cadence/code_review_recommendations.md`
 * Include timestamp, task ID, and categorized suggestions

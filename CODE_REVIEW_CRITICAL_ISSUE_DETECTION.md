@@ -89,7 +89,7 @@ def is_redispatching_for_fixes(self, decision: SupervisorDecision,
     return any(keyword in guidance_lower for keyword in fix_keywords)
 ```
 
-### 3. Post-Decision Validation
+### 3. Post-Decision Validation with Retry Loop
 
 After supervisor outputs its decision but before dispatching the agent:
 
@@ -98,31 +98,62 @@ After supervisor outputs its decision but before dispatching the agent:
 if decision.action == "execute":
     # Check if we just completed code review with issues
     if code_review_pending:
-        # Look for code review results in supervisor output
-        supervisor_output = read_supervisor_output(session_id)
-        severity_counts = parse_code_review_severity(supervisor_output)
+        # Get max retries from config (default to 5)
+        max_fix_retries = self._get_config_value(
+            'orchestration.code_review_fix_retries', 5
+        )
+        fix_retry_count = 0
 
-        if severity_counts['critical'] > 0 or severity_counts['high'] > 0:
-            # Supervisor should have re-dispatched for fixes
-            if not is_redispatching_for_fixes(decision, previous_task_id):
-                logger.warning(
-                    f"Code review found {severity_counts['critical']} CRITICAL "
-                    f"and {severity_counts['high']} HIGH issues, but supervisor "
-                    f"is moving to next task. Forcing re-evaluation."
-                )
+        while fix_retry_count < max_fix_retries:
+            # Look for code review results in supervisor output
+            supervisor_output = read_supervisor_output(session_id)
+            severity_counts = parse_code_review_severity(supervisor_output)
 
-                # Force supervisor to re-evaluate with --continue
-                decision = self.run_supervisor_analysis(
-                    session_id,
-                    use_continue=True,  # Force continue
-                    iteration=iteration,
-                    code_review_pending=True,
-                    additional_context={
-                        'force_review_fixes': True,
-                        'severity_counts': severity_counts,
-                        'previous_task_id': previous_task_id
-                    }
-                )
+            if severity_counts['critical'] > 0 or severity_counts['high'] > 0:
+                # Supervisor should have re-dispatched for fixes
+                if not is_redispatching_for_fixes(decision, previous_task_id):
+                    fix_retry_count += 1
+                    logger.warning(
+                        f"Code review found {severity_counts['critical']} CRITICAL "
+                        f"and {severity_counts['high']} HIGH issues, but supervisor "
+                        f"is moving to next task. Forcing re-evaluation "
+                        f"(attempt {fix_retry_count}/{max_fix_retries})."
+                    )
+
+                    # Force supervisor to re-evaluate with --continue
+                    decision = self.run_supervisor_analysis(
+                        session_id,
+                        use_continue=True,  # Force continue
+                        iteration=iteration,
+                        code_review_pending=True,
+                        additional_context={
+                            'force_review_fixes': True,
+                            'severity_counts': severity_counts,
+                            'previous_task_id': previous_task_id,
+                            'fix_retry_attempt': fix_retry_count
+                        }
+                    )
+
+                    # Check if supervisor made the right decision this time
+                    if is_redispatching_for_fixes(decision, previous_task_id):
+                        logger.info(
+                            f"Supervisor correctly re-dispatched for fixes on "
+                            f"retry {fix_retry_count}"
+                        )
+                        break
+                else:
+                    # Supervisor made correct decision, no retry needed
+                    break
+            else:
+                # No critical/high issues found, proceed normally
+                break
+
+        # If we exhausted retries, log error but continue
+        if fix_retry_count >= max_fix_retries:
+            logger.error(
+                f"Supervisor failed to handle critical code review issues after "
+                f"{max_fix_retries} attempts. Proceeding anyway to avoid infinite loop."
+            )
 ```
 
 ### 4. Enhanced Supervisor Prompt
@@ -155,9 +186,10 @@ When code reviews identify CRITICAL or HIGH severity issues:
 
 1. **Add severity parsing** to orchestrator.py
 2. **Enhance supervisor prompt** with explicit critical issue handling
-3. **Add post-decision validation** to catch missed critical issues
+3. **Add post-decision validation with retry loop** to catch missed critical issues
 4. **Track code review state** to know when fixes are expected
 5. **Force re-evaluation** if supervisor tries to skip critical fixes
+6. **Add config setting** `orchestration.code_review_fix_retries` to config.yaml (default: 5)
 
 ## Testing Strategy
 

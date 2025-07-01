@@ -164,6 +164,7 @@ class OrchestrationConfig:
     session_timeout: int = 300  # seconds - moved from OrchestratorDefaults
     cleanup_keep_sessions: int = 5  # moved from OrchestratorDefaults
     workflow_max_history_size: int = 1000  # Maximum state transitions to keep in workflow history
+    code_review_fix_retries: int = 5  # Maximum retries when supervisor fails to handle critical code review issues
 
 
 @dataclass

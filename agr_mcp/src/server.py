@@ -13,7 +13,7 @@ from mcp.types import Tool, CallToolRequest, CallToolResult, TextContent
 
 from .config import Config
 from .errors import AGRMCPError
-from .tools import api_schema, file_download, gene_query
+from .tools import api_schema, file_download, gene_query, metadata_tools
 from .utils.logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -127,6 +127,15 @@ class AGRMCPServer:
                         }
                     }
                 }
+            ),
+            Tool(
+                name="get_supported_species",
+                description="Get list of supported species from Alliance Genome Resources",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False
+                }
             )
         ]
 
@@ -162,6 +171,8 @@ class AGRMCPServer:
                 result = await file_download.download_data(**arguments)
             elif tool_name == "get_api_schema":
                 result = await api_schema.get_schema(**arguments)
+            elif tool_name == "get_supported_species":
+                result = await metadata_tools.get_supported_species(**arguments)
             else:
                 raise AGRMCPError(f"Unknown tool: {tool_name}")
 

@@ -57,10 +57,26 @@ Use multiple models for expert validation:
 
 ## Actions Based on Project Review Results
 
+### CRITICAL: Project Review Issue Resolution
+
+When reviews identify SHOWSTOPPER issues (CRITICAL or HIGH severity):
+
+1. **MANDATORY**: You MUST return action "execute" with:
+   - Clear task_id for the task that needs fixes
+   - Guidance specifically addressing each CRITICAL/HIGH issue
+   - Focus ONLY on showstopper issues, not suggestions
+
+2. **Detection**: Look for these severity indicators:
+   - 🔴 CRITICAL or "CRITICAL -"
+   - 🟠 HIGH or "HIGH Priority"
+   - Lines containing "severity": "critical" or "severity": "high"
+   - References to security vulnerabilities, missing functionality, or system-breaking bugs
+
 ### If Reviews Identify SHOWSTOPPER Issues
 * Return action: "execute" with targeted fixes ONLY for critical issues
 * Do NOT attempt to implement all suggestions from reviews
 * If project drift detected, guidance should realign with original requirements
+* Provide SPECIFIC guidance listing each critical/high issue to fix
 
 ### If NO SHOWSTOPPER Issues (Project Works as Specified)
 * Return action: "complete"

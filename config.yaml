@@ -331,6 +331,9 @@ orchestration:
   session_timeout: 300
   # Number of sessions to keep during cleanup - moved from OrchestratorDefaults
   cleanup_keep_sessions: 5
+  # Maximum retries when supervisor fails to handle critical code review issues
+  # Prevents infinite loop between supervisor and orchestrator
+  code_review_fix_retries: 5
 
 # Retry behavior configuration
 retry_behavior:

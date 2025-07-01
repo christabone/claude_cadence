@@ -51,6 +51,8 @@ class SupervisorDecision:
     review_scope: str = ""  # "task" or "project"
     files_to_review: List[str] = None  # List of files to review
     supervisor_findings: str = ""  # Supervisor's own code review findings
+    # Code review validation fields
+    code_review_has_critical_or_high_issues: bool = False  # True if code review found CRITICAL or HIGH issues
 
 
 
@@ -566,7 +568,7 @@ class SupervisorOrchestrator:
         iteration = 0
         previous_agent_needed_help = False  # Track if previous agent needed help/errored
         code_review_pending = False  # Track if code review is needed after task completion
-        agent_was_fixing_code_review = False  # Track if the previous agent was fixing code review issues
+        self._previous_task_id = None  # Track previous task ID for code review validation
 
         # Define completion marker file
         completion_marker = self.project_root / ".cadence" / "project_complete.marker"
@@ -595,8 +597,7 @@ class SupervisorOrchestrator:
 
             # 1. Run supervisor to analyze and decide
             # Determine if supervisor should use continue based on config and previous agent status
-            # Special case: always use --continue when coming back from code review fixes
-            supervisor_use_continue = self._should_use_continue_for_supervisor(iteration, previous_agent_needed_help, agent_was_fixing_code_review)
+            supervisor_use_continue = self._should_use_continue_for_supervisor(iteration, previous_agent_needed_help)
             decision = self.run_supervisor_analysis(
                 self.current_session_id,
                 use_continue=supervisor_use_continue,
@@ -621,16 +622,45 @@ class SupervisorOrchestrator:
                     logger.warning("Supervisor said complete but no marker file found - continuing...")
                     # Reset state as supervisor is handling the situation
                     previous_agent_needed_help = False
-                    agent_was_fixing_code_review = False
                     # Continue to let supervisor create the marker
                     continue
             elif decision.action == "skip":
                 logger.info(f"Skipping: {decision.reason}")
                 # Reset state as supervisor is moving to new task
                 previous_agent_needed_help = False
-                agent_was_fixing_code_review = False
                 continue
             elif decision.action == "execute":
+                # Post-decision validation for code review critical issues
+                if code_review_pending and hasattr(self, '_previous_task_id'):
+                    logger.debug(f"Post-decision validation: code_review_pending=True, previous_task_id={self._previous_task_id}, current_task_id={decision.task_id}")
+
+                    # Check if supervisor reported critical/high issues
+                    if decision.code_review_has_critical_or_high_issues:
+                        # Supervisor found critical/high issues
+                        is_moving_to_different_task = (decision.task_id != self._previous_task_id)
+
+                        if is_moving_to_different_task:
+                            # This is an error - supervisor should stay on same task to fix issues
+                            logger.error(
+                                f"Code review found CRITICAL/HIGH issues but supervisor is moving "
+                                f"to a different task (from {self._previous_task_id} to {decision.task_id}). "
+                                f"This should not happen - supervisor prompt may need adjustment."
+                            )
+                            # For now, trust the supervisor's decision but log the error
+                        else:
+                            logger.info(
+                                f"Code review found CRITICAL/HIGH issues. Supervisor correctly "
+                                f"staying on task {decision.task_id} to fix them."
+                            )
+                    else:
+                        # No critical/high issues found
+                        logger.info(f"Code review passed with no CRITICAL/HIGH issues. Supervisor can proceed.")
+                        code_review_pending = False  # Clear the flag
+
+                # Track current task ID for next iteration.
+                # The task_id is validated and normalized within run_supervisor_analysis.
+                self._previous_task_id = decision.task_id
+
                 # Save the decision as a snapshot for later review
                 snapshot_file = self.validate_path(
                     self.supervisor_dir / f"decision_snapshot_{decision.session_id}.json",
@@ -766,17 +796,9 @@ class SupervisorOrchestrator:
                 # Update tracking for next iteration's continue decision
                 previous_agent_needed_help = agent_result.requested_help or not agent_result.success
 
-                # Check if this is a code review fix dispatch
-                # This happens when supervisor found critical issues and is re-dispatching to fix them
-                if code_review_pending and decision.guidance and any(keyword in decision.guidance.lower() for keyword in ["fix", "critical", "vulnerability", "security", "bug"]):
-                    agent_was_fixing_code_review = True
-                    logger.info("Agent is being dispatched to fix code review issues")
-                else:
-                    agent_was_fixing_code_review = False
-                    # If we had code review pending but not fixing issues, it means review passed
-                    if code_review_pending:
-                        logger.info("Code review completed successfully - no critical issues found")
-                        code_review_pending = False
+                # Note: The actual code review validation happens in the next supervisor iteration
+                # We don't know yet if there are critical issues - the supervisor will determine that
+                # and set code_review_has_critical_or_high_issues appropriately
 
                 # 6. Continue to next iteration
                 continue
@@ -1108,6 +1130,28 @@ Retry attempt {json_retry_count + 1} of {self.cadence_config.retry_behavior.get(
                 if 'project_root' in decision_data and 'project_path' not in decision_data:
                     decision_data['project_path'] = decision_data.pop('project_root')
 
+                # Validate task_id format - must be a single number without decimal notation
+                if 'task_id' in decision_data and decision_data['task_id']:
+                    task_id = str(decision_data['task_id'])
+
+                    # First, correct for decimal notation if present
+                    if '.' in task_id:
+                        main_task_id = task_id.split('.')[0]
+                        logger.warning(
+                            f"Supervisor provided subtask ID '{task_id}' in task_id field. "
+                            f"Correcting to main task ID '{main_task_id}'."
+                        )
+                        task_id = main_task_id
+
+                    # Then, validate that the result is a number
+                    if not task_id.isdigit():
+                        logger.error(
+                            f"Invalid task_id format: '{task_id}' is not a valid number. "
+                            "This may cause issues with task tracking."
+                        )
+
+                    decision_data['task_id'] = task_id
+
                 decision = SupervisorDecision(**decision_data)
                 decision.execution_time = supervisor_execution_time
                 decision.quit_too_quickly = supervisor_execution_time < quick_quit_threshold
@@ -1160,25 +1204,19 @@ Retry attempt {json_retry_count + 1} of {self.cadence_config.retry_behavior.get(
         if not directory.is_dir():
             raise FileNotFoundError(f"Directory does not exist: {directory}")
 
-    def _should_use_continue_for_supervisor(self, iteration: int, previous_agent_needed_help: bool,
-                                            agent_was_fixing_code_review: bool = False) -> bool:
+    def _should_use_continue_for_supervisor(self, iteration: int, previous_agent_needed_help: bool) -> bool:
         """
         Determine if supervisor should use --continue flag based on config and previous agent status.
 
         Args:
             iteration: Current iteration number (1-based)
             previous_agent_needed_help: True if previous agent needed help/errored
-            agent_was_fixing_code_review: True if the previous agent was dispatched to fix code review issues
 
         Returns:
             True if supervisor should use --continue flag
         """
         if iteration == 1:
             return False  # Never continue on first iteration
-
-        # Special case: ALWAYS use --continue when coming back from code review fixes
-        if agent_was_fixing_code_review:
-            return True
 
         supervisor_config = self.cadence_config.supervisor
         supervisor_use_continue_config = supervisor_config.use_continue
@@ -1222,11 +1260,7 @@ Retry attempt {json_retry_count + 1} of {self.cadence_config.retry_behavior.get(
         # Create prompt with TODOs
         prompt = self.build_agent_prompt(todos, guidance, task_id, subtasks, project_root, use_continue)
 
-        logger.info("=" * 50)
-        logger.info("AGENT STARTING...")
-        logger.info(f"Working on {len(todos)} TODOs")
-        logger.info(f"Model: {self.cadence_config.agent.defaults.get('model', 'unknown')}")
-        logger.info("=" * 50)
+        # Agent will be started by UnifiedAgent with consistent formatting
 
         # Convert config to dictionary format for UnifiedAgent
         config_dict = {
@@ -1742,3 +1776,28 @@ Retry attempt {json_retry_count + 1} of {self.cadence_config.retry_behavior.get(
 
         if removed_count > 0:
             logger.info(f"Cleaned up {removed_count} old supervisor log files")
+
+
+    def read_supervisor_output(self, session_id: str) -> List[str]:
+        """
+        Read supervisor output from log file.
+
+        Args:
+            session_id: The session ID to read logs for
+
+        Returns:
+            List of output lines from supervisor
+        """
+        log_file = self.project_root / ".cadence" / "logs" / session_id / "supervisor.log"
+
+        if not log_file.exists():
+            logger.warning(f"Supervisor log file not found: {log_file}")
+            return []
+
+        try:
+            with open(log_file, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            return [line.rstrip('\n') for line in lines]
+        except Exception as e:
+            logger.error(f"Failed to read supervisor log: {e}")
+            return []

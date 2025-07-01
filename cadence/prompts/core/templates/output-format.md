@@ -42,9 +42,21 @@ After analyzing the tasks, output ONLY a JSON object (no other text).
     "project_root": "{{ project_path }}",
     "guidance": "Focus on implementing secure authentication using JWT tokens",
     "session_id": "{{ session_id }}",
-    "reason": "Task 1 has 2 incomplete subtasks that need implementation"
+    "reason": "Task 1 has 2 incomplete subtasks that need implementation",
+    "code_review_has_critical_or_high_issues": false
 }
 ```
+
+**CRITICAL TASK_ID REQUIREMENT**:
+- The `task_id` field MUST contain ONLY the main task number (e.g., "1", "2", "3")
+- NEVER include subtask notation in task_id (NOT "1.1", NOT "1.2", NOT "1.2.3")
+- The subtasks array contains the full subtask IDs (like "1.1", "1.2")
+- This is essential for the orchestrator to track task transitions correctly
+
+**IMPORTANT**: When outputting "execute" after a code review:
+- Set `code_review_has_critical_or_high_issues` to `true` if the review found ANY CRITICAL or HIGH severity issues
+- Set `code_review_has_critical_or_high_issues` to `false` if the review found ONLY MEDIUM/LOW issues or no issues
+- This field helps the orchestrator validate your decision
 
 2. **"skip"** - When current task has no pending subtasks:
 ```json
@@ -77,7 +89,7 @@ After analyzing the tasks, output ONLY a JSON object (no other text).
 ```json
 {
     "action": "zen_mcp_codereview",
-    "task_id": "1.2",
+    "task_id": "1",
     "review_scope": "task",
     "session_id": "{{ session_id }}",
     "reason": "Task complete, triggered code review via zen MCP"
@@ -88,7 +100,7 @@ After analyzing the tasks, output ONLY a JSON object (no other text).
 ```json
 {
     "action": "code_review",
-    "task_id": "1.2",
+    "task_id": "1",
     "task_title": "Implement user authentication",
     "review_scope": "task",
     "files_to_review": ["src/auth.py", "src/models/user.py"],
@@ -97,6 +109,8 @@ After analyzing the tasks, output ONLY a JSON object (no other text).
     "reason": "All subtasks completed, initiating code review per configuration"
 }
 ```
+
+**REMINDER**: For ALL actions, `task_id` contains ONLY the main task number (e.g., "1", "2", "3"), never subtask IDs!
 
 ## Important Guidelines
 
