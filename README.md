@@ -2,19 +2,19 @@
 
 A task-driven supervision system for Claude Code agent execution. Manages agent execution through Task Master integration, with agents working on TODOs until completion.
 
-**Status: Core implementation complete. Major reorganization completed (2025-06-28). Currently in testing and optimization phase.**
+**Status: Core implementation complete. Major cleanup completed (2025-07-01). Production-ready with comprehensive test coverage.**
 
 ## Overview
 
 Claude Cadence provides a framework for managing Claude Code agents through task-based execution. The supervisor uses Task Master to get and track tasks, then provides TODOs to agents who work until all tasks are complete or a maximum turn limit is reached.
 
-### Recent Improvements (2025-06-28)
+### Recent Improvements (2025-07-01)
 
-- **Configuration Consolidation**: Unified all configuration in `config.yaml`, removed duplicate constants.py
-- **Dispatcher Architecture**: Refactored FixAgentDispatcher to extend EnhancedAgentDispatcher for cleaner inheritance
-- **Code Quality**: Removed dead code, outdated documentation, and temporary test files
-- **Enhanced Type Safety**: Added UUID validation for message IDs, improved schema validation
-- **Testing**: Comprehensive test suite with fix iteration tracking and timeout handling
+- **Repository Cleanup**: Removed temporary files, test scripts, and development artifacts
+- **Documentation Reorganization**: Created structured `docs/` hierarchy with clear separation of concerns
+- **Session Management**: Improved `.cadence/` directory structure for better session tracking
+- **Prompt System**: Maintained modular YAML-based prompts with `!include` directives
+- **Production Ready**: Clean codebase with only essential files and comprehensive test coverage
 
 ## Features
 
@@ -241,6 +241,36 @@ content = load_yaml_with_includes("prompts.yaml")
 - Consider using read-only file systems or containers for sensitive operations
 - Monitor agent execution through scratchpad files and logs
 
+## Project Structure
+
+```
+claude_cadence/
+├── cadence/                    # Core application modules
+│   ├── prompts/               # Prompt system
+│   │   ├── core/             # Modular prompt components
+│   │   └── *.md              # Analysis/documentation files
+│   ├── prompts.yml           # Main prompt configuration
+│   └── *.py                  # Core modules (orchestrator, agents, etc.)
+├── docs/                      # Documentation
+│   ├── user-guide/           # End-user documentation
+│   ├── developer-guide/      # Developer documentation
+│   ├── api-reference/        # API documentation
+│   ├── project-management/   # Planning and tracking
+│   └── archive/              # Historical documents
+├── tests/                     # Comprehensive test suite
+│   ├── unit/                 # Unit tests
+│   ├── integration/          # Integration tests
+│   └── e2e/                  # End-to-end tests
+├── examples/                  # Usage examples
+├── scripts/                   # Utility scripts
+├── .cadence/                  # Runtime directories
+│   ├── supervisor/           # Supervisor session logs
+│   └── agent/                # Agent scratchpads
+├── .taskmaster/              # Task Master integration
+├── config.yaml               # Main configuration
+└── orchestrate.py            # Main entry point
+```
+
 ## Documentation
 
 - **[Prompt System Guide](docs/architecture/claude_cadence_prompt_system_guide.md)** - **Complete prompt system reference**
@@ -268,11 +298,38 @@ MIT License - see LICENSE file for details
 
 ## Development
 
-See [docs/development/TODO.md](docs/development/TODO.md) for planned improvements and known issues.
+### Running Tests
+
+```bash
+# Run all tests
+python -m pytest
+
+# Run specific test suites
+python -m pytest tests/unit/
+python -m pytest tests/integration/
+python -m pytest tests/e2e/
+
+# Run with coverage
+python -m pytest --cov=cadence --cov-report=html
+```
+
+### Key Development Files
+
+- `TODO.md` - High-level project roadmap and priorities
+- `docs/development/TODO.md` - Detailed technical tasks
+- `CHANGELOG.md` - Version history and releases
+- `config.yaml` - All configuration options with documentation
 
 ## Contributing
 
-Contributions welcome! Please read our contributing guidelines before submitting PRs.
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Write tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
+
+See our contributing guidelines for more details.
 
 ## Citation
 
