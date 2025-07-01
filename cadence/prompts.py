@@ -7,9 +7,6 @@ supervisors and agents, maintaining context across executions.
 
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass, field
-from datetime import datetime
-from pathlib import Path
-from jinja2 import Template
 
 # Output processing constants
 MAX_OUTPUT_TRUNCATE_LENGTH = 3000  # Max chars before truncating supervisor analysis
@@ -347,69 +344,4 @@ class PromptGenerator:
         return self.loader.format_template(
             final_summary.get('template', 'Summary:\nExecutions: {executions_count}\nTotal turns: {total_turns}\n{completed_section}\n{incomplete_section}'),
             prompt_context
-        )
-
-
-class TodoPromptManager:
-    """Manages prompts for TODO-based execution"""
-
-    def __init__(self, todos: List[str], max_turns: int,
-                 config_path: Optional[str] = None):
-        self.context = ExecutionContext(
-            todos=todos,
-            max_turns=max_turns,
-            remaining_todos=todos.copy()
-        )
-        self.generator = PromptGenerator(config_path)
-        self.session_id = "unknown"
-        self.task_numbers = ""
-
-    def update_progress(self, completed_todos: List[str], remaining_todos: List[str]):
-        """Update execution progress"""
-        self.context.completed_todos = completed_todos
-        self.context.remaining_todos = remaining_todos
-
-    def add_issue(self, issue: str):
-        """Add an issue encountered during execution"""
-        self.context.issues_encountered.append(issue)
-
-    def get_initial_prompt(self) -> str:
-            """Get the initial agent prompt with TODOs"""
-            return self.generator.generate_initial_todo_prompt(
-                context=self.context,
-                session_id=self.session_id,
-                task_numbers=self.task_numbers
-            )
-
-
-    def get_continuation_prompt(self, analysis_guidance: str, continuation_context: str,
-                               supervisor_analysis: Dict[str, Any]) -> str:
-        """Get continuation prompt for resumed execution"""
-        self.context.continuation_context = continuation_context
-        return self.generator.generate_continuation_prompt(
-            context=self.context,
-            analysis_guidance=analysis_guidance,
-            supervisor_analysis=supervisor_analysis
-        )
-
-    def get_supervisor_prompt(self, execution_output: str, previous_executions: List[Dict]) -> str:
-        """Get supervisor analysis prompt"""
-        return self.generator.generate_supervisor_analysis_prompt(
-            execution_output=execution_output,
-            context=self.context,
-            previous_executions=previous_executions
-        )
-
-
-
-    def add_guidance(self, guidance: str):
-        """Add guidance to history"""
-        self.context.previous_guidance.append(guidance)
-
-    def get_final_summary(self, executions: List[Dict], total_turns: int) -> str:
-        """Get final summary for the user"""
-        return self.generator.generate_final_summary(
-            executions=executions,
-            context=self.context,
-            total_turns=total_turns
         )

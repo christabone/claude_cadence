@@ -7,10 +7,8 @@ identified during code reviews, with context preservation and iteration limits.
 REFACTORED VERSION: Now extends EnhancedAgentDispatcher for cleaner architecture.
 """
 
-import json
 import logging
 import threading
-import time
 import heapq
 from dataclasses import dataclass, field
 from enum import Enum
@@ -18,8 +16,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Callable, Tuple
 from datetime import datetime, timedelta
 
-from .agent_messages import AgentMessage, MessageType, AgentType, Priority, MessageContext, SuccessCriteria
-from .enhanced_agent_dispatcher import EnhancedAgentDispatcher, DispatchConfig
+from .agent_messages import AgentMessage, Priority, MessageContext, SuccessCriteria
+from .enhanced_agent_dispatcher import EnhancedAgentDispatcher
 from .config import FixAgentDispatcherConfig
 from .fix_iteration_tracker import EscalationStrategy, PersistenceType
 

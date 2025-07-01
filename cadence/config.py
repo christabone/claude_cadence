@@ -6,7 +6,7 @@ import os
 import yaml
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Literal, get_args
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field, asdict, is_dataclass
 
 # Constants for system-wide strings (defaults, can be overridden by config)
@@ -512,7 +512,7 @@ class ConfigLoader:
                         else:
                             # Convert to expected type
                             value = expected_type(value)
-                    except (ValueError, TypeError) as e:
+                    except (ValueError, TypeError):
                         logger.error(f"Invalid value for {key}: {value} (expected {expected_type.__name__})")
                         continue
 

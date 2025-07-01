@@ -10,7 +10,7 @@ import time
 import json
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Any, Optional, List, Union, Callable
+from typing import Dict, Any, Optional, List, Union
 from pathlib import Path
 # Note: retry_utils not needed for MCP responses - they don't need retry
 

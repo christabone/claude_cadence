@@ -6,8 +6,6 @@ code review, and collaborative analysis when agents need help.
 """
 
 import re
-import json
-import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass

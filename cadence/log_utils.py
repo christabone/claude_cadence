@@ -4,7 +4,6 @@ Logging utilities for Claude Cadence with color support
 
 import logging
 import sys
-import os
 from pathlib import Path
 
 # ANSI color codes

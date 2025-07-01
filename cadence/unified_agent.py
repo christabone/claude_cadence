@@ -5,11 +5,10 @@ Unified Agent - A single, configurable agent class for all agent behaviors
 import os
 import json
 import time
-import subprocess
 import logging
 import asyncio
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -204,13 +203,12 @@ class UnifiedAgent:
         """Run async coroutine safely, handling existing event loops"""
         try:
             # Try to get the running event loop
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
             # No running event loop, we can use asyncio.run()
             return asyncio.run(coroutine)
         else:
             # There is a running event loop, we need to run in a thread
-            import concurrent.futures
             import threading
 
             result = [None]

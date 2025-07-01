@@ -13,8 +13,7 @@ import json
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
-from typing import Dict, Any, Optional, List, Union
-from datetime import datetime
+from typing import Dict, Any, Optional, List
 from enum import Enum
 
 from .log_utils import ColoredFormatter, Colors

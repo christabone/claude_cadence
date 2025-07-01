@@ -5,7 +5,6 @@ This module provides a minimal, clean YAML loader that supports !include tags
 for file inclusion with relative path handling and comprehensive error reporting.
 """
 
-import os
 import yaml
 import re
 from pathlib import Path

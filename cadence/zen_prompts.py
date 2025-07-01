@@ -5,7 +5,7 @@ This module provides focused, scenario-specific prompts for each Zen tool
 to ensure efficient assistance while preventing scope creep.
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 from datetime import datetime
 
 

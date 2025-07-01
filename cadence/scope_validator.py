@@ -5,14 +5,12 @@ This module provides comprehensive validation to ensure fix actions stay within
 original task boundaries and prevent uncontrolled scope expansion.
 """
 
-import os
 import re
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Set, Union, Any, Tuple
+from typing import Dict, List, Optional, Set, Any, Tuple
 from pathlib import Path
-import difflib
 
 logger = logging.getLogger(__name__)
 

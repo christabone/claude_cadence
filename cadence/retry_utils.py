@@ -7,7 +7,6 @@ malformed responses from Claude CLI agents.
 """
 
 import json
-import subprocess
 import logging
 import time
 from pathlib import Path
@@ -119,9 +118,6 @@ def run_claude_with_realtime_retry(
     Raises:
         RetryError: If all retry attempts fail
     """
-    retry_count = 0
-    last_output = []
-    last_error = ""
 
     for attempt in range(max_retries):
         # Add delay for retries (simple linear backoff)
@@ -149,7 +145,6 @@ def run_claude_with_realtime_retry(
         try:
             # Run subprocess with realtime output
             returncode, all_output = realtime_runner_func(cmd, working_dir, process_name)
-            last_output = all_output
 
             if returncode != 0:
                 logger.error(f"{process_name} failed with code {returncode}")

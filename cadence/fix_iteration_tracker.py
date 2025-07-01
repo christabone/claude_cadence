@@ -11,10 +11,10 @@ import threading
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Callable, Union
+from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass, field, asdict
 
-from .agent_messages import AgentMessage, MessageType
+from .agent_messages import AgentMessage
 
 logger = logging.getLogger(__name__)
 

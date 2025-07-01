@@ -38,6 +38,8 @@ setup(
         "dev": [
             "pytest>=7.0.0",
             "pytest-cov>=4.0.0",
+            "pytest-mock>=3.10.0",
+            "pyfakefs>=5.2.0",
             "black>=23.0.0",
             "isort>=5.0.0",
             "mypy>=1.0.0",

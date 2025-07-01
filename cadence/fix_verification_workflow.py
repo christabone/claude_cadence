@@ -8,16 +8,15 @@ resolve identified issues without introducing regressions.
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Set, Any, Tuple
-from pathlib import Path
+from typing import Dict, List, Optional, Any
 import time
 from datetime import datetime
 
 from cadence.code_review_agent import CodeReviewAgent, ReviewConfig
 from cadence.review_result_parser import (
-    ReviewResultProcessor, ParsedIssue, CategoryResult, IssueSeverity
+    ReviewResultProcessor, ParsedIssue, IssueSeverity
 )
-from cadence.scope_validator import ScopeValidator, FixProposal, TaskScope
+from cadence.scope_validator import ScopeValidator, FixProposal
 
 logger = logging.getLogger(__name__)
 

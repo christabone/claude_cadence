@@ -5,7 +5,7 @@ Task Master integration for structured task tracking
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 from dataclasses import dataclass
 
 

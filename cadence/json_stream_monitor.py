@@ -4,7 +4,7 @@ Simple JSON Stream Monitor for handling multi-line JSON objects
 import json
 import logging
 import re
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 

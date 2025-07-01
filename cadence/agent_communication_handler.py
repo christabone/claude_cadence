@@ -10,7 +10,7 @@ import logging
 import threading
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional, Callable, Any, Union
+from typing import Dict, List, Optional, Callable, Any
 from dataclasses import dataclass, field
 from enum import Enum
 
