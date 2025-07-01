@@ -245,10 +245,15 @@ supervisor_prompts:
          - Only proceed with code review if truly all subtasks are complete
 
       2. **Perform comprehensive code review using zen tools**:
-         - Use `mcp__zen__codereview` to analyze the files modified by the agent
+         - **REQUIRED**: Use the Task tool to spin off TWO separate sub-agents to run zen code reviews
+         - Launch 2 concurrent sub-agents, one for each zen review model:
+           * Sub-agent 1: "Run zen code review with first model on the modified files for task X"
+           * Sub-agent 2: "Run zen code review with second model on the modified files for task X"
+         - Each sub-agent should call `mcp__zen__codereview` with their assigned model
+         - This parallel approach leverages multiple expert perspectives efficiently
          - Review for: security vulnerabilities, bugs, performance issues, code quality
          - Focus on the task requirements and implementation correctness
-         - Pay attention to the severity levels reported by the review
+         - Pay attention to the severity levels reported by both reviews
 
       3. **Act on the code review results** (always return "execute" action):
          - **If CRITICAL or HIGH severity issues found**:

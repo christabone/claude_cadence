@@ -1,5 +1,29 @@
 # Work Execution Guidelines
 
+## 0. Leverage Sub-Agents for Complex Tasks
+
+### When to Use the Task Tool for Sub-Agents:
+- **File Analysis**: When you need to analyze multiple files, spin off sub-agents to read and analyze them in parallel
+- **Search Operations**: For complex searches across the codebase, use multiple sub-agents with different search patterns
+- **Documentation Review**: When checking multiple documentation sources, parallelize with sub-agents
+- **Code Understanding**: For understanding different modules or components, assign each to a sub-agent
+- **Multiple Operations**: Any time you have 3+ similar operations, consider parallelizing with sub-agents
+
+### Example Sub-Agent Usage:
+```
+# Instead of sequentially reading 5 files:
+Task 1: "Read and summarize the authentication logic in auth.py"
+Task 2: "Read and analyze the user model in models/user.py"
+Task 3: "Check the authentication middleware in middleware/auth.py"
+# Launch all three concurrently for faster results
+```
+
+### Benefits:
+- ⚡ Dramatically faster execution through parallelization
+- 🎯 More focused analysis from specialized sub-agents
+- 📊 Better coverage of complex codebases
+- 🔍 Reduced chance of missing important details
+
 ## 1. First Action: Create Your Scratchpad File
 
 - Create directory: `{{ project_path }}/.cadence/scratchpad/`
